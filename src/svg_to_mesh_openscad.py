@@ -159,12 +159,18 @@ def generate_scad_mesh(
     def flip(y):
         return canvas_height - y if canvas_height else y
 
-    tube_calls_1 = [
-        f"    nail_tube({x:.4f}, {flip(y):.4f});" for x, y in nail_positions_1
-    ]
-    tube_calls_2 = [
-        f"    nail_tube({x:.4f}, {flip(y):.4f});" for x, y in nail_positions_2
-    ]
+    def _ocall(x, y):
+        ny = flip(y)
+        return f"    outer_cylinder({x:.4f}, {ny:.4f});"
+
+    def _hcall(x, y):
+        ny = flip(y)
+        return f"    inner_hole({x:.4f}, {ny:.4f});"
+
+    tube_calls_1 = [_ocall(x, y) for x, y in nail_positions_1]
+    tube_calls_2 = [_ocall(x, y) for x, y in nail_positions_2]
+    hole_calls_1 = [_hcall(x, y) for x, y in nail_positions_1]
+    hole_calls_2 = [_hcall(x, y) for x, y in nail_positions_2]
 
     def bar_call(x1, y1, x2, y2):
         ny1, ny2 = flip(y1), flip(y2)
@@ -182,33 +188,25 @@ def generate_scad_mesh(
         f"wall = {wall_thickness}; // wall thickness of hollow cylinders in mm",
         f"corner_strategy = {default_strategy}; // 1=corners-first, 2=all-vertices",
         f"",
-        f"module nail_tube(x, y) {{",
+        f"module outer_cylinder(x, y) {{",
         f"    translate([x, y, 0])",
-        f"    difference() {{",
         f"        cylinder(h = thickness, d = hole_d + 2*wall, $fn=16);",
-        f"        translate([0, 0, -1])",
-        f"            cylinder(h = thickness + 2, d = hole_d, $fn=16);",
-        f"    }}",
+        f"}}",
+        f"",
+        f"module inner_hole(x, y) {{",
+        f"    translate([x, y, -1])",
+        f"        cylinder(h = thickness + 2, d = hole_d, $fn=16);",
         f"}}",
         f"",
         f"module connecting_bar(p1, p2) {{",
-        f"    oc = hole_d + 2*wall;   // outer cylinder diameter",
-        f"    h = thickness;",
-        f"    dx = p2[0] - p1[0];",
-        f"    dy = p2[1] - p1[1];",
-        f"    len = sqrt(dx*dx + dy*dy);",
-        f"    if (len > oc + 0.01) {{",
-        f"        angle = atan2(dy, dx);",
-        f"        // overlap=wall so bar fuses into cylinder wall",
-        f"        overlap = wall;",
-        f"        translate(p1)",
-        f"        rotate([0, 0, angle])",
-        f"        translate([oc/2 - overlap, -oc/2, -1])",
-        f"            cube([len - oc + 2*overlap, oc, h + 2]);",
+        f"    oc = hole_d + 2*wall;",
+        f"    hull() {{",
+        f"        translate(p1) cylinder(h = thickness, d = oc, $fn=16);",
+        f"        translate(p2) cylinder(h = thickness, d = oc, $fn=16);",
         f"    }}",
         f"}}",
         f"",
-        f"module nail_tubes_strategy1() {{",
+        f"module outer_cylinders_strategy1() {{",
     ]
     lines += tube_calls_1
     lines += [
@@ -220,7 +218,13 @@ def generate_scad_mesh(
     lines += [
         f"}}",
         f"",
-        f"module nail_tubes_strategy2() {{",
+        f"module inner_holes_strategy1() {{",
+    ]
+    lines += hole_calls_1
+    lines += [
+        f"}}",
+        f"",
+        f"module outer_cylinders_strategy2() {{",
     ]
     lines += tube_calls_2
     lines += [
@@ -232,17 +236,29 @@ def generate_scad_mesh(
     lines += [
         f"}}",
         f"",
+        f"module inner_holes_strategy2() {{",
+    ]
+    lines += hole_calls_2
+    lines += [
+        f"}}",
+        f"",
         f"module mesh_strategy1() {{",
-        f"    union() {{",
-        f"        nail_tubes_strategy1();",
-        f"        connecting_bars_strategy1();",
+        f"    difference() {{",
+        f"        union() {{",
+        f"            outer_cylinders_strategy1();",
+        f"            connecting_bars_strategy1();",
+        f"        }}",
+        f"        inner_holes_strategy1();",
         f"    }}",
         f"}}",
         f"",
         f"module mesh_strategy2() {{",
-        f"    union() {{",
-        f"        nail_tubes_strategy2();",
-        f"        connecting_bars_strategy2();",
+        f"    difference() {{",
+        f"        union() {{",
+        f"            outer_cylinders_strategy2();",
+        f"            connecting_bars_strategy2();",
+        f"        }}",
+        f"        inner_holes_strategy2();",
         f"    }}",
         f"}}",
         f"",

@@ -53,8 +53,8 @@ mesh-example:
 		--output examples/output/letter_A.svg
 	python3 src/svg_to_mesh_openscad.py \
 		--input examples/output/letter_A.svg \
-		--spacing 12 \
-		--hole-diameter 3 \
+		--spacing 10 \
+		--hole-diameter 5 \
 		--wall-thickness 1 \
 		--thickness 5 \
 		--corner-strategy 1 \
