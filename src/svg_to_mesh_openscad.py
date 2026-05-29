@@ -23,11 +23,12 @@ from svg_to_openscad import (
 )
 
 
-def find_mesh_edges(points, k=2):
+def find_mesh_edges(points, k=2, min_bridges=3):
     """Build a connected graph by connecting each point to its k nearest neighbors.
 
-    After k-nearest assignment, bridges are added between disconnected components
-    (via the closest cross-component pairs) so the entire mesh is a single part.
+    After k-nearest assignment, disconnected components are bridged by adding
+    *min_bridges* closest cross-component edges between each component pair,
+    ensuring the mesh is a single connected part with adequate structural joints.
     Returns a deduplicated list of ((x1,y1), (x2,y2)) edges.
     """
     n = len(points)
@@ -68,23 +69,31 @@ def find_mesh_edges(points, k=2):
                     stack.extend(adj[v] - visited)
             components.append(comp)
 
-    # Bridge components by adding the closest cross-component edge
+    # Bridge components by adding min_bridges closest cross-component edges.
+    # Each bridge uses a distinct nail on the incoming component (components[1])
+    # so structural joints are spread across the inner shape, not all at one point.
     while len(components) > 1:
-        best_dist = math.inf
-        best_pair = None
+        pairs = []
         for i in components[0]:
             xi, yi = points[i]
             for j in components[1]:
                 d = math.hypot(xi - points[j][0], yi - points[j][1])
-                if d < best_dist:
-                    best_dist = d
-                    best_pair = (i, j)
-        if best_pair is not None:
-            edge = tuple(sorted(best_pair))
-            edges.add(edge)
-            i, j = best_pair
-            adj[i].add(j)
-            adj[j].add(i)
+                pairs.append((d, i, j))
+        pairs.sort(key=lambda x: x[0])
+        added = 0
+        used = set()
+        for _, i, j in pairs:
+            if added >= min_bridges:
+                break
+            if j in used:
+                continue
+            edge = tuple(sorted((i, j)))
+            if edge not in edges:
+                edges.add(edge)
+                adj[i].add(j)
+                adj[j].add(i)
+                used.add(j)
+                added += 1
         components[0] |= components[1]
         components.pop(1)
 
