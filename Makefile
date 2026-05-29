@@ -1,0 +1,51 @@
+.PHONY: all install test clean lint example batch
+
+install:
+	pip3 install -r requirements.txt
+
+test:
+	python3 -m pytest tests/ -v
+
+clean:
+	rm -rf examples/output/*.svg examples/output/*.scad examples/output/*.stl
+	rm -rf __pycache__ src/__pycache__ tests/__pycache__
+	rm -rf .pytest_cache
+
+lint:
+	python3 -m py_compile src/string_art_utils.py
+	python3 -m py_compile src/font_to_svg.py
+	python3 -m py_compile src/svg_to_openscad.py
+
+# Generate a quick example: letter A in Arial
+OPENSCAD := $(shell command -v openscad 2>/dev/null || [ -x /Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD ] && echo "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD")
+
+example:
+	@mkdir -p examples/output
+	python3 src/font_to_svg.py \
+		--letter A \
+		--font Arial \
+		--output examples/output/letter_A.svg
+	python3 src/svg_to_openscad.py \
+		--input examples/output/letter_A.svg \
+		--spacing 12 \
+		--hole-diameter 3 \
+		--thickness 5 \
+		--corner-strategy 1 \
+		--output examples/output/template_A.scad
+	@if [ -n "$(OPENSCAD)" ]; then \
+		echo "Rendering STL..."; \
+		$(OPENSCAD) -o examples/output/template_A.stl examples/output/template_A.scad; \
+		echo "STL saved to examples/output/template_A.stl"; \
+	else \
+		echo "Examples created (no OpenSCAD found for STL render)."; \
+	fi
+	@echo ""
+	@echo "  SVG:  examples/output/letter_A.svg"
+	@echo "  SCAD: examples/output/template_A.scad"
+	@test -f examples/output/template_A.stl && echo "  STL:  examples/output/template_A.stl"
+
+# Batch generate for a set of letters (default: A-Z)
+LETTERS ?= A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
+batch:
+	@mkdir -p output
+	python3 scripts/batch_generate.py --letters $(LETTERS) --spacing 10 --hole-diameter 3 --skip-stl
