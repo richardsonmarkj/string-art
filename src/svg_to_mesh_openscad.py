@@ -14,8 +14,12 @@ import os
 import sys
 
 from svg_to_openscad import (
+    _build_arc_table,
+    _point_from_arc,
+    _signed_area,
     _split_subpaths,
     compute_nail_positions,
+    get_corner_vertices,
     offset_nails_inward,
     parse_svg_paths,
     relative_svg_path,
@@ -311,9 +315,14 @@ def main():
     nails_2 = []
     starts_1 = [0]
     starts_2 = [0]
+    inner_corners_1 = []
+    inner_corners_2 = []
+
     for pd in path_data:
         subpaths, _ = _split_subpaths(pd["path"])
         for sp in subpaths:
+            s1_before = len(nails_1)
+            s2_before = len(nails_2)
             for strategy in (1, 2):
                 nails_with_t = compute_nail_positions(sp, args.spacing, strategy)
                 if nails_with_t:
@@ -327,12 +336,67 @@ def main():
                         nails_2.extend(positions)
                         starts_2.append(len(nails_2))
 
+            is_inner = _signed_area(sp) < 0
+            if is_inner and sp.length() > 0.01:
+                total = sp.length()
+                table = _build_arc_table(sp)
+                vertices = get_corner_vertices(sp)
+                corner_ts = {t for t, is_c in vertices if is_c and abs(t) > 1e-10}
+                if not corner_ts:
+                    continue
+                corner_xy = [_point_from_arc(table, t * total) for t in corner_ts]
+
+                def _find_corner_nails(nails, start, end, corners_out):
+                    sub_nails = nails[start:end]
+                    for cx, cy in corner_xy:
+                        best = min(
+                            range(len(sub_nails)),
+                            key=lambda k: math.hypot(
+                                cx - sub_nails[k][0], cy - sub_nails[k][1]
+                            ),
+                        )
+                        gi = start + best
+                        if gi not in corners_out:
+                            corners_out.append(gi)
+
+                _find_corner_nails(nails_1, s1_before, len(nails_1), inner_corners_1)
+                _find_corner_nails(nails_2, s2_before, len(nails_2), inner_corners_2)
+
     if not nails_1 and not nails_2:
         print("Error: No nail positions computed", file=sys.stderr)
         sys.exit(1)
 
     edges_1 = find_mesh_edges(nails_1, k=2, subpath_starts=starts_1) if nails_1 else []
     edges_2 = find_mesh_edges(nails_2, k=2, subpath_starts=starts_2) if nails_2 else []
+
+    def _add_corner_bridges(nails, edges, corners, starts):
+        if not corners:
+            return
+        edge_set = set(edges)
+        for ci in corners:
+            xc, yc = nails[ci]
+            start = end = None
+            for s in range(len(starts) - 1):
+                if starts[s] <= ci < starts[s + 1]:
+                    start, end = starts[s], starts[s + 1]
+                    break
+            if start is None:
+                continue
+            best = None
+            best_d = math.inf
+            for j, (xj, yj) in enumerate(nails):
+                if start <= j < end:
+                    continue
+                d = math.hypot(xc - xj, yc - yj)
+                if d < best_d:
+                    best_d = d
+                    best = j
+            if best is not None:
+                edge_set.add((nails[ci], nails[best]))
+        edges[:] = sorted(edge_set, key=lambda e: (e[0][0], e[0][1]))
+
+    _add_corner_bridges(nails_1, edges_1, inner_corners_1, starts_1)
+    _add_corner_bridges(nails_2, edges_2, inner_corners_2, starts_2)
 
     canvas_height = svg_canvas_height(args.input)
 
