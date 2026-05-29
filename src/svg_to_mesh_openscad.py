@@ -23,12 +23,28 @@ from svg_to_openscad import (
 )
 
 
-def find_mesh_edges(points, k=2, min_bridges=3):
+def _subpath_info(idx, starts):
+    for s in range(len(starts) - 1):
+        if starts[s] <= idx < starts[s + 1]:
+            return s, idx - starts[s]
+    return len(starts) - 1, idx - starts[-1]
+
+
+def _circ_dist(a, b, length):
+    d = abs(a - b)
+    return min(d, length - d)
+
+
+def find_mesh_edges(points, k=2, min_bridges=3, min_nail_gap=4, subpath_starts=None):
     """Build a connected graph by connecting each point to its k nearest neighbors.
 
     After k-nearest assignment, disconnected components are bridged by adding
     *min_bridges* closest cross-component edges between each component pair,
     ensuring the mesh is a single connected part with adequate structural joints.
+
+    When *subpath_starts* is provided, bridges on the incoming component are
+    placed at least *min_nail_gap* positions apart along the same subpath
+    (accounting for wrap-around on closed contours).
     Returns a deduplicated list of ((x1,y1), (x2,y2)) edges.
     """
     n = len(points)
@@ -71,7 +87,7 @@ def find_mesh_edges(points, k=2, min_bridges=3):
 
     # Bridge components by adding min_bridges closest cross-component edges.
     # Each bridge uses a distinct nail on the incoming component (components[1])
-    # so structural joints are spread across the inner shape, not all at one point.
+    # and respects min_nail_gap spacing along the same subpath.
     while len(components) > 1:
         pairs = []
         for i in components[0]:
@@ -80,20 +96,39 @@ def find_mesh_edges(points, k=2, min_bridges=3):
                 d = math.hypot(xi - points[j][0], yi - points[j][1])
                 pairs.append((d, i, j))
         pairs.sort(key=lambda x: x[0])
+
         added = 0
-        used = set()
+        used_nails = set()
+        used_positions = {}  # subpath_idx -> list of positions along subpath
+
         for _, i, j in pairs:
             if added >= min_bridges:
                 break
-            if j in used:
+            if j in used_nails:
                 continue
+
+            if subpath_starts is not None:
+                sp_idx, sp_pos = _subpath_info(j, subpath_starts)
+                sp_len = subpath_starts[sp_idx + 1] - subpath_starts[sp_idx]
+                too_close = False
+                existing = used_positions.get(sp_idx, [])
+                for pos in existing:
+                    if _circ_dist(sp_pos, pos, sp_len) <= min_nail_gap:
+                        too_close = True
+                        break
+                if too_close:
+                    continue
+
             edge = tuple(sorted((i, j)))
             if edge not in edges:
                 edges.add(edge)
                 adj[i].add(j)
                 adj[j].add(i)
-                used.add(j)
+                used_nails.add(j)
+                if subpath_starts is not None:
+                    used_positions.setdefault(sp_idx, []).append(sp_pos)
                 added += 1
+
         components[0] |= components[1]
         components.pop(1)
 
@@ -274,23 +309,30 @@ def main():
 
     nails_1 = []
     nails_2 = []
+    starts_1 = [0]
+    starts_2 = [0]
     for pd in path_data:
         subpaths, _ = _split_subpaths(pd["path"])
         for sp in subpaths:
-            for strategy, store in [(1, nails_1), (2, nails_2)]:
+            for strategy in (1, 2):
                 nails_with_t = compute_nail_positions(sp, args.spacing, strategy)
                 if nails_with_t:
                     positions = offset_nails_inward(
                         nails_with_t, sp, args.hole_diameter, all_subpaths=subpaths
                     )
-                    store.extend(positions)
+                    if strategy == 1:
+                        nails_1.extend(positions)
+                        starts_1.append(len(nails_1))
+                    else:
+                        nails_2.extend(positions)
+                        starts_2.append(len(nails_2))
 
     if not nails_1 and not nails_2:
         print("Error: No nail positions computed", file=sys.stderr)
         sys.exit(1)
 
-    edges_1 = find_mesh_edges(nails_1, k=2) if nails_1 else []
-    edges_2 = find_mesh_edges(nails_2, k=2) if nails_2 else []
+    edges_1 = find_mesh_edges(nails_1, k=2, subpath_starts=starts_1) if nails_1 else []
+    edges_2 = find_mesh_edges(nails_2, k=2, subpath_starts=starts_2) if nails_2 else []
 
     canvas_height = svg_canvas_height(args.input)
 
