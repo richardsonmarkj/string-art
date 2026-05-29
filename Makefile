@@ -56,7 +56,6 @@ mesh-example:
 		--spacing 12 \
 		--hole-diameter 3 \
 		--wall-thickness 1 \
-		--bar-diameter 2 \
 		--thickness 5 \
 		--corner-strategy 1 \
 		--output examples/output/mesh_A.scad
