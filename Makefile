@@ -1,4 +1,4 @@
-.PHONY: all install test clean lint example mesh-example batch
+.PHONY: all install test clean lint example mesh-example batch batch-mesh
 
 install:
 	pip3 install -r requirements.txt
@@ -71,8 +71,13 @@ mesh-example:
 	@echo "  SCAD: examples/output/mesh_A.scad"
 	@test -f examples/output/mesh_A.stl && echo "  STL:  examples/output/mesh_A.stl"
 
-# Batch generate for a set of letters (default: A-Z)
+# Batch generate slab templates for a set of letters (default: A-Z)
 LETTERS ?= A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
 batch:
 	@mkdir -p output
 	python3 scripts/batch_generate.py --letters $(LETTERS) --spacing 10 --hole-diameter 3 --skip-stl
+
+# Batch generate mesh models
+batch-mesh:
+	@mkdir -p output
+	python3 scripts/batch_generate.py --mesh --letters $(LETTERS) --spacing 10 --hole-diameter 3 --wall-thickness 1 --skip-stl

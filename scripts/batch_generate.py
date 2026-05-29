@@ -88,6 +88,17 @@ def main():
         default=OUTPUT_DIR,
         help=f"Output directory (default: {OUTPUT_DIR})",
     )
+    parser.add_argument(
+        "--mesh",
+        action="store_true",
+        help="Generate mesh SCAD (svg_to_mesh_openscad) instead of slab template",
+    )
+    parser.add_argument(
+        "--wall-thickness",
+        type=float,
+        default=1.0,
+        help="Wall thickness for mesh mode in mm (default: 1.0)",
+    )
     parser.add_argument("--skip-stl", action="store_true", help="Skip STL rendering")
     args = parser.parse_args()
 
@@ -103,13 +114,20 @@ def main():
             print("  OpenSCAD not found — STL rendering will be skipped")
 
     font_to_svg = os.path.join(REPO_DIR, "src", "font_to_svg.py")
-    svg_to_openscad = os.path.join(REPO_DIR, "src", "svg_to_openscad.py")
+    if args.mesh:
+        scad_script = os.path.join(REPO_DIR, "src", "svg_to_mesh_openscad.py")
+        label = "MESH"
+        prefix = "mesh_"
+    else:
+        scad_script = os.path.join(REPO_DIR, "src", "svg_to_openscad.py")
+        label = "SCAD"
+        prefix = "template_"
 
     for letter in letters:
         print(f"\n[{letter}]")
         svg_path = os.path.join(out_dir, f"letter_{letter}.svg")
-        scad_path = os.path.join(out_dir, f"template_{letter}.scad")
-        stl_path = os.path.join(out_dir, f"template_{letter}.stl")
+        scad_path = os.path.join(out_dir, f"{prefix}{letter}.scad")
+        stl_path = os.path.join(out_dir, f"{prefix}{letter}.stl")
 
         run(
             [
@@ -125,10 +143,29 @@ def main():
             "SVG",
         )
 
-        run(
-            [
+        if args.mesh:
+            cmd = [
                 sys.executable,
-                svg_to_openscad,
+                scad_script,
+                "--input",
+                svg_path,
+                "--spacing",
+                str(args.spacing),
+                "--hole-diameter",
+                str(args.hole_diameter),
+                "--wall-thickness",
+                str(args.wall_thickness),
+                "--thickness",
+                str(args.thickness),
+                "--corner-strategy",
+                str(args.corner_strategy),
+                "--output",
+                scad_path,
+            ]
+        else:
+            cmd = [
+                sys.executable,
+                scad_script,
                 "--input",
                 svg_path,
                 "--spacing",
@@ -141,9 +178,8 @@ def main():
                 str(args.corner_strategy),
                 "--output",
                 scad_path,
-            ],
-            "SCAD",
-        )
+            ]
+        run(cmd, label)
 
         if openscad:
             run([openscad, "-o", stl_path, scad_path], "STL")
