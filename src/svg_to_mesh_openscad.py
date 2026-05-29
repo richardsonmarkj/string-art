@@ -24,12 +24,17 @@ from svg_to_openscad import (
 
 
 def find_mesh_edges(points, k=2):
-    """Find the k nearest Euclidean neighbors for each point.
+    """Build a connected graph by connecting each point to its k nearest neighbors.
 
+    After k-nearest assignment, bridges are added between disconnected components
+    (via the closest cross-component pairs) so the entire mesh is a single part.
     Returns a deduplicated list of ((x1,y1), (x2,y2)) edges.
     """
-    edges = set()
     n = len(points)
+    if n <= 1:
+        return []
+
+    edges = set()
     for i in range(n):
         xi, yi = points[i]
         dists = []
@@ -41,6 +46,47 @@ def find_mesh_edges(points, k=2):
         dists.sort(key=lambda x: x[0])
         for _, j in dists[:k]:
             edges.add(tuple(sorted((i, j))))
+
+    # Build adjacency
+    adj = {i: set() for i in range(n)}
+    for i, j in edges:
+        adj[i].add(j)
+        adj[j].add(i)
+
+    # Find connected components
+    visited = set()
+    components = []
+    for i in range(n):
+        if i not in visited:
+            stack = [i]
+            comp = set()
+            while stack:
+                v = stack.pop()
+                if v not in visited:
+                    visited.add(v)
+                    comp.add(v)
+                    stack.extend(adj[v] - visited)
+            components.append(comp)
+
+    # Bridge components by adding the closest cross-component edge
+    while len(components) > 1:
+        best_dist = math.inf
+        best_pair = None
+        for i in components[0]:
+            xi, yi = points[i]
+            for j in components[1]:
+                d = math.hypot(xi - points[j][0], yi - points[j][1])
+                if d < best_dist:
+                    best_dist = d
+                    best_pair = (i, j)
+        if best_pair is not None:
+            edge = tuple(sorted(best_pair))
+            edges.add(edge)
+            i, j = best_pair
+            adj[i].add(j)
+            adj[j].add(i)
+        components[0] |= components[1]
+        components.pop(1)
 
     return [
         ((points[i][0], points[i][1]), (points[j][0], points[j][1])) for i, j in edges
@@ -98,17 +144,19 @@ def generate_scad_mesh(
         f"}}",
         f"",
         f"module connecting_bar(p1, p2) {{",
-        f"    w = hole_d + 2*wall;",
+        f"    oc = hole_d + 2*wall;   // outer cylinder diameter",
         f"    h = thickness;",
         f"    dx = p2[0] - p1[0];",
         f"    dy = p2[1] - p1[1];",
         f"    len = sqrt(dx*dx + dy*dy);",
-        f"    if (len > w + 0.01) {{",
+        f"    if (len > oc + 0.01) {{",
         f"        angle = atan2(dy, dx);",
+        f"        // overlap=wall so bar fuses into cylinder wall",
+        f"        overlap = wall;",
         f"        translate(p1)",
         f"        rotate([0, 0, angle])",
-        f"        translate([w/2, -w/2, 0])",
-        f"            cube([len - w, w, h]);",
+        f"        translate([oc/2 - overlap, -oc/2, -1])",
+        f"            cube([len - oc + 2*overlap, oc, h + 2]);",
         f"    }}",
         f"}}",
         f"",
