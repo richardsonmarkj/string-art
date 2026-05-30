@@ -136,7 +136,11 @@ def main():
                 )
 
         for x, y in pts:
-            dwg.add(dwg.circle(center=(x, y), r=r, fill="black"))
+            dwg.add(
+                dwg.circle(
+                    center=(x, y), r=r, fill="white", stroke="black", stroke_width=0.5
+                )
+            )
 
     dwg.save()
 
