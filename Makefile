@@ -1,4 +1,4 @@
-.PHONY: all install test clean lint example mesh-example batch batch-mesh
+.PHONY: all install test clean lint example mesh-example plan-example batch batch-mesh batch-plan
 
 install:
 	pip3 install -r requirements.txt
@@ -16,6 +16,7 @@ lint:
 	python3 -m py_compile src/font_to_svg.py
 	python3 -m py_compile src/svg_to_openscad.py
 	python3 -m py_compile src/svg_to_mesh_openscad.py
+	python3 -m py_compile src/svg_to_nail_plan_svg.py
 
 # Generate a quick example: letter A in Arial
 OPENSCAD := $(shell command -v openscad 2>/dev/null || [ -x /Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD ] && echo "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD")
@@ -75,9 +76,30 @@ mesh-example:
 LETTERS ?= A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
 batch:
 	@mkdir -p output
-	python3 scripts/batch_generate.py --letters $(LETTERS) --spacing 10 --hole-diameter 3 --skip-stl
+	python3 scripts/batch_generate.py --letters $(LETTERS) --spacing 10 --hole-diameter 5
+
+plan-example:
+	@mkdir -p examples/output
+	python3 src/font_to_svg.py \
+		--letter A \
+		--font Arial \
+		--output examples/output/letter_A.svg
+	python3 src/svg_to_nail_plan_svg.py \
+		--input examples/output/letter_A.svg \
+		--spacing 12 \
+		--hole-diameter 3 \
+		--corner-strategy 1 \
+		--output examples/output/plan_A.svg
+	@echo ""
+	@echo "  SVG:  examples/output/letter_A.svg"
+	@echo "  Plan: examples/output/plan_A.svg"
 
 # Batch generate mesh models
 batch-mesh:
 	@mkdir -p output
-	python3 scripts/batch_generate.py --mesh --letters $(LETTERS) --spacing 10 --hole-diameter 3 --wall-thickness 1 --skip-stl
+	python3 scripts/batch_generate.py --mesh --letters $(LETTERS) --spacing 10 --hole-diameter 5 --wall-thickness 1
+
+# Batch generate plan SVGs
+batch-plan:
+	@mkdir -p output
+	python3 scripts/batch_generate.py --plan --letters $(LETTERS) --spacing 10 --hole-diameter 5
