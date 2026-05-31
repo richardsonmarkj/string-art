@@ -1,68 +1,45 @@
 # AGENTS.md — Instructions for AI Assistants
 
-This is a string art nail template toolchain project. It converts letters to SVG
-outlines, then to OpenSCAD 3D models with nail placement holes for 3D printing.
+String art nail template toolchain. See README.md for user-facing docs.
 
 ## Project Structure
 
 ```
 src/
-  font_to_svg.py        # Tool 1: letter → SVG outline
-  svg_to_openscad.py    # Tool 2: SVG → OpenSCAD 3D template
-  string_art_utils.py   # Shared utilities (font lookup, glyphs, transforms)
+  font_to_svg.py            # letter → SVG outline
+  svg_to_mesh_openscad.py   # SVG → OpenSCAD mesh (hollow cyls + bars)
+  svg_to_nail_plan_svg.py   # SVG → 2D blueprint SVG
+  string_art_utils.py       # Font lookup, glyph extraction, paths, nail geometry
 scripts/
-  generate_svg.sh       # Shell wrapper for Tool 1
-  generate_scad_stl.sh  # Shell wrapper for Tool 2 (optionally renders STL)
+  generate_svg.sh           # Shell wrapper for font_to_svg.py
+  generate_scad_stl.sh      # Shell wrapper for svg_to_mesh_openscad.py (+ STL)
+  batch_generate.py         # Batch processing for multiple letters
 tests/
-  test_font_to_svg.py   # Tests for Tool 1
-  test_svg_to_openscad.py  # Tests for Tool 2
-  test_data/            # Test fixture SVGs
-Makefile                # Convenience targets: install, test, clean, example (renders STL)
-AGENTS.md               # This file — instructions for AI assistants
+  test_font_to_svg.py
+  test_svg_to_openscad.py  # Nail geometry, subpaths, corner detection
+  test_data/                # Test fixture SVGs
+Makefile                    # install, test, lint, example, batch targets
+AGENTS.md                   # This file — instructions for AI assistants
+README.md                   # User-facing documentation
 ```
 
-## Key Design Decisions
+## Design Decisions — AI-relevant
 
-- **Tool 2 accepts any SVG**, not just output from Tool 1. Nail positions are computed
-  in the SVG's native coordinate space via `svgpathtools`, and OpenSCAD's `import()`
-  preserves this same space — so alignment is guaranteed.
-- **Both corner strategies** are implemented (1=corners-first, 2=all-vertices).
-- **fonttools** is used for font-to-glyph extraction (supports TTF and OTF).
-- **svgwrite** generates clean SVG output.
-- **svgpathtools** parses SVG paths for nail position computation.
-- Import approach: SCAD uses `import("file.svg")` for the letter shape, preserving
-  full bezier precision; nail holes are placed at matching coordinates.
-- **No Y-flip**: SVG coordinate space (Y-down) is preserved directly in SCAD —
+- **Mesh and Plan tools accept any SVG**, not just output from Tool 1. Nail positions
+  are computed in the SVG's native coordinate space via `svgpathtools`, and
+  OpenSCAD's `import()` preserves this same space — alignment is guaranteed.
+- **No Y-flip**: SVG coordinate space (Y-down) is preserved directly in SCAD.
   OpenSCAD's `import()` handles SVG natively. Nail hole coordinates use raw SVG y.
-- **Nail placement is per-subpath** — each closed contour (outer, inner hole/counter)
-  gets its own independent nail distribution based on its own perimeter length and
-  the spacing parameter. This produces complete circles on each contour.
-- **Nails are placed directly on the path** — no inward offset is applied.
-- **Default output is filled** — Tool 1 renders SVG with `fill="black" fill-rule="evenodd"`
-  by default. Pass `--outline` to get `fill="none" stroke="black"` for visualization.
+- **Nail placement is per-subpath** — each closed contour gets independent nail
+  distribution based on its own perimeter length and the spacing parameter.
+- **Nails are placed directly on the path** — no inward offset is applied (see below).
+- **Default output is filled**: `fill="black" fill-rule="evenodd"`. Pass `--outline`
+  for `fill="none" stroke="black"`.
 
 ## Nail Offset Algorithm (disabled)
 
-`offset_nails_inward()` in `src/svg_to_openscad.py` is a no-op — nails are placed
-directly on the path (no inward offset). The function is kept as a placeholder for
-future implementation.
-
-## Testing
-
-```bash
-make test        # runs pytest (36 tests)
-make lint        # Python syntax check
-make example     # generates a quick A → SVG → SCAD → STL example
-```
-
-## Current State (36 passing tests)
-
-All tests pass. Key test coverage:
-- Font lookup, glyph extraction, canvas-space coordinates (Tool 1)
-- SVG parsing, corner detection, nail positions (strategy 1 & 2), spacing
-- Subpath splitting, signed area (winding detection), offset containment
-- Integration tests: end-to-end square, letter O with strategy 2
-- Outline mode for SVG generation
+`offset_nails_inward()` in `src/string_art_utils.py` is a no-op — nails are placed
+directly on the path. The function is kept as a placeholder for future implementation.
 
 ## Known Issues / Gotchas
 
@@ -90,30 +67,15 @@ All tests pass. Key test coverage:
   the cleaning step. Letter A nail count went from 59 to 66 with the previously
   missing right-leg section now properly populated.
 
-## Full Pipeline
+## Testing
 
 ```bash
-# Step 1: Generate SVG (filled, for template generation)
-python3 src/font_to_svg.py --letter A --font Arial --output letter_A.svg
-
-# Step 1b: Generate SVG (outline, for visualization)
-python3 src/font_to_svg.py --letter A --font Arial --outline --output letter_A_outline.svg
-
-# Step 2: Generate SCAD
-python3 src/svg_to_openscad.py \
-    --input letter_A.svg \
-    --spacing 10 \
-    --hole-diameter 8 \
-    --thickness 5 \
-    --corner-strategy 1 \
-    --output template.scad
-
-# Step 3: Render STL
-openscad -o template.stl template.scad
+make test        # pytest (36 tests)
+make lint        # Python syntax check
+make example     # A → SVG → SCAD → STL
 ```
 
-## Dependencies
-
-- Python 3.12+
-- svgwrite, svgpathtools, fonttools, numpy, pytest
-- OpenSCAD (for STL rendering, not required for SVG/SCAD generation)
+Test coverage: font lookup, glyph extraction, canvas-space coords, SVG parsing,
+corner detection, nail positions (strategy 1 & 2), spacing, subpath splitting,
+signed area (winding), offset containment, integration tests (square, letter O),
+outline mode.

@@ -91,12 +91,12 @@ def main():
     parser.add_argument(
         "--mesh",
         action="store_true",
-        help="Generate mesh SCAD (svg_to_mesh_openscad) instead of slab template",
+        help="Generate mesh SCAD (svg_to_mesh_openscad)",
     )
     parser.add_argument(
         "--plan",
         action="store_true",
-        help="Generate 2D plan SVG (svg_to_nail_plan_svg) instead of slab template",
+        help="Generate 2D plan SVG (svg_to_nail_plan_svg)",
     )
     parser.add_argument(
         "--wall-thickness",
@@ -106,6 +106,11 @@ def main():
     )
     parser.add_argument("--skip-stl", action="store_true", help="Skip STL rendering")
     args = parser.parse_args()
+
+    if not args.mesh and not args.plan:
+        parser.error("Specify --mesh or --plan")
+    if args.mesh and args.plan:
+        parser.error("--mesh and --plan are mutually exclusive")
 
     letters = args.letters if args.letters else LETTERS
     out_dir = os.path.join(REPO_DIR, args.output_dir)
@@ -125,15 +130,10 @@ def main():
         label = "PLAN"
         prefix = "plan_"
         ext = ".svg"
-    elif args.mesh:
+    else:
         gen_script = os.path.join(REPO_DIR, "src", "svg_to_mesh_openscad.py")
         label = "MESH"
         prefix = "mesh_"
-        ext = ".scad"
-    else:
-        gen_script = os.path.join(REPO_DIR, "src", "svg_to_openscad.py")
-        label = "SCAD"
-        prefix = "template_"
         ext = ".scad"
 
     for letter in letters:
@@ -171,7 +171,7 @@ def main():
                 "--output",
                 out_path,
             ]
-        elif args.mesh:
+        else:
             cmd = [
                 sys.executable,
                 gen_script,
@@ -183,23 +183,6 @@ def main():
                 str(args.hole_diameter),
                 "--wall-thickness",
                 str(args.wall_thickness),
-                "--thickness",
-                str(args.thickness),
-                "--corner-strategy",
-                str(args.corner_strategy),
-                "--output",
-                out_path,
-            ]
-        else:
-            cmd = [
-                sys.executable,
-                gen_script,
-                "--input",
-                svg_path,
-                "--spacing",
-                str(args.spacing),
-                "--hole-diameter",
-                str(args.hole_diameter),
                 "--thickness",
                 str(args.thickness),
                 "--corner-strategy",

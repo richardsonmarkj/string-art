@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 
 import svgwrite
 
-from svg_to_openscad import (
+from string_art_utils import (
     _split_subpaths,
     compute_nail_positions,
     offset_nails_inward,

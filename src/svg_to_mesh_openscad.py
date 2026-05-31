@@ -13,7 +13,7 @@ import math
 import os
 import sys
 
-from svg_to_openscad import (
+from string_art_utils import (
     _build_arc_table,
     _point_from_arc,
     _signed_area,

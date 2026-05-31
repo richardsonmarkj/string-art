@@ -1,13 +1,10 @@
 import math
 import os
 import sys
-import tempfile
-
-import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from svg_to_openscad import (
+from string_art_utils import (
     parse_svg_paths,
     is_corner,
     get_corner_vertices,
@@ -15,7 +12,6 @@ from svg_to_openscad import (
     _split_subpaths,
     _signed_area,
     offset_nails_inward,
-    generate_scad,
 )
 from svgpathtools import Path, Line, CubicBezier, QuadraticBezier
 
@@ -96,60 +92,6 @@ class TestComputeNailPositions:
             x2, y2, _ = nails[i]
             dist = math.hypot(x2 - x1, y2 - y1)
             assert dist <= 25, f"Distance {dist:.1f} > 25 between consecutive nails"
-
-
-class TestGenerateScad:
-    def test_scad_contains_expected_keywords(self):
-        nails_1 = [(10.0, 10.0), (90.0, 10.0), (90.0, 90.0), (10.0, 90.0)]
-        nails_2 = [
-            (10.0, 10.0),
-            (50.0, 10.0),
-            (90.0, 10.0),
-            (90.0, 50.0),
-            (90.0, 90.0),
-            (50.0, 90.0),
-            (10.0, 90.0),
-            (10.0, 50.0),
-        ]
-        scad = generate_scad(
-            svg_path="/tmp/test.svg",
-            nail_positions_1=nails_1,
-            nail_positions_2=nails_2,
-            hole_diameter=8,
-            thickness=5,
-            default_strategy=1,
-            scad_path="/tmp/output.scad",
-            canvas_height=100,
-        )
-        assert "module letter_outline()" in scad
-        assert "module nail_holes_strategy1()" in scad
-        assert "module nail_holes_strategy2()" in scad
-        assert "module nail_holes()" in scad
-        assert "difference()" in scad
-        assert "linear_extrude" in scad
-        assert "cylinder" in scad
-        assert "import(" in scad
-        assert "thickness = 5" in scad
-        assert "hole_d = 8" in scad
-        assert "corner_strategy = 1" in scad
-
-    def test_scad_has_correct_number_of_holes(self):
-        nails_1 = [(10.0, 10.0), (20.0, 20.0)]
-        nails_2 = [(30.0, 30.0), (40.0, 40.0)]
-        scad = generate_scad(
-            "/tmp/test.svg",
-            nails_1,
-            nails_2,
-            8,
-            5,
-            2,
-            "/tmp/output.scad",
-            canvas_height=100,
-        )
-        count = scad.count("cylinder")
-        assert count == len(nails_1) + len(nails_2), (
-            f"Expected {len(nails_1) + len(nails_2)} cylinders, found {count}"
-        )
 
 
 class TestSplitSubpaths:
@@ -244,76 +186,3 @@ class TestOffsetNailsInward:
             assert (ox, oy) == (nails[i][0], nails[i][1]), (
                 f"Nail {i} moved despite zero diameter"
             )
-
-
-class TestSvgToOpenscadIntegration:
-    def test_end_to_end_square(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-        from svg_to_openscad import main as scad_main
-
-        svg_path = load_svg("square.svg")
-        with tempfile.NamedTemporaryFile(suffix=".scad", delete=False, mode="w") as tmp:
-            tmp_path = tmp.name
-
-        try:
-            sys.argv = [
-                "svg_to_openscad.py",
-                "--input",
-                svg_path,
-                "--spacing",
-                "15",
-                "--hole-diameter",
-                "8",
-                "--thickness",
-                "5",
-                "--corner-strategy",
-                "1",
-                "--output",
-                tmp_path,
-            ]
-            scad_main()
-
-            assert os.path.isfile(tmp_path)
-            with open(tmp_path) as f:
-                content = f.read()
-            assert "cylinder" in content
-            assert "module letter_outline()" in content
-            assert "module nail_holes()" in content
-        finally:
-            os.unlink(tmp_path)
-
-    def test_end_to_end_letter_o_strategy2(self):
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-        from svg_to_openscad import main as scad_main
-
-        svg_path = load_svg("letter_O_outline.svg")
-        with tempfile.NamedTemporaryFile(suffix=".scad", delete=False, mode="w") as tmp:
-            tmp_path = tmp.name
-
-        try:
-            sys.argv = [
-                "svg_to_openscad.py",
-                "--input",
-                svg_path,
-                "--spacing",
-                "15",
-                "--hole-diameter",
-                "8",
-                "--thickness",
-                "5",
-                "--corner-strategy",
-                "2",
-                "--output",
-                tmp_path,
-            ]
-            scad_main()
-
-            assert os.path.isfile(tmp_path)
-            with open(tmp_path) as f:
-                content = f.read()
-            assert "cylinder" in content
-            assert "module letter_outline()" in content
-            assert "module nail_holes()" in content
-            assert "corner_strategy = 2" in content
-        finally:
-            os.unlink(tmp_path)

@@ -1,15 +1,15 @@
 #!/bin/bash
-# generate_scad_stl.sh — Convert SVG outline to OpenSCAD and optionally render STL
+# generate_scad_stl.sh — Convert SVG outline to OpenSCAD mesh model and optionally render STL
 #
 # Usage:
-#   ./scripts/generate_scad_stl.sh --input letter_A.svg --spacing 10 --hole-diameter 8 --output template.scad
+#   ./scripts/generate_scad_stl.sh --input letter_A.svg --spacing 10 --hole-diameter 5 --output mesh.scad
 #
 # Optional: pass --stl to also render an STL via the OpenSCAD CLI:
-#   ./scripts/generate_scad_stl.sh --input letter_A.svg --spacing 10 --hole-diameter 8 --stl
+#   ./scripts/generate_scad_stl.sh --input letter_A.svg --spacing 10 --hole-diameter 5 --wall-thickness 1 --stl
 #
-# All other arguments (--spacing, --hole-diameter, --thickness, --corner-strategy)
-# are forwarded to src/svg_to_openscad.py.
-# See `python3 src/svg_to_openscad.py --help` for full options.
+# Arguments (--spacing, --hole-diameter, --wall-thickness, --thickness, --corner-strategy)
+# are forwarded to src/svg_to_mesh_openscad.py.
+# See `python3 src/svg_to_mesh_openscad.py --help` for full options.
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -28,10 +28,9 @@ for arg in "$@"; do
     esac
 done
 
-python3 "$SCRIPT_DIR/../src/svg_to_openscad.py" "${POSITIONAL_ARGS[@]}"
+python3 "$SCRIPT_DIR/../src/svg_to_mesh_openscad.py" "${POSITIONAL_ARGS[@]}"
 
 if $RENDER_STL; then
-    # Extract output file from positional args
     SCAD_FILE=""
     for i in "${!POSITIONAL_ARGS[@]}"; do
         if [[ "${POSITIONAL_ARGS[$i]}" == "--output" ]] && [[ $((i + 1)) -lt ${#POSITIONAL_ARGS[@]} ]]; then
@@ -40,7 +39,6 @@ if $RENDER_STL; then
         fi
     done
 
-    # Find OpenSCAD CLI — check PATH first, then macOS App bundle
     OPENSCAD=""
     if command -v openscad &>/dev/null; then
         OPENSCAD="openscad"
