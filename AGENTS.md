@@ -13,6 +13,7 @@ src/
 scripts/
   generate_svg.sh           # Shell wrapper for font_to_svg.py
   generate_scad_stl.sh      # Shell wrapper for svg_to_mesh_openscad.py (+ STL)
+  generate_plan_svg.sh      # Shell wrapper for svg_to_nail_plan_svg.py
   batch_generate.py         # Batch processing for multiple letters
 tests/
   test_font_to_svg.py

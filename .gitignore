@@ -8,3 +8,4 @@ output/
 examples/output/
 examples/tmp/
 *.stl
+internal/

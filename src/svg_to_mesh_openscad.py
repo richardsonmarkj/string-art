@@ -39,16 +39,42 @@ def _circ_dist(a, b, length):
     return min(d, length - d)
 
 
-def find_mesh_edges(points, k=2, min_bridges=3, min_nail_gap=4, subpath_starts=None):
-    """Build a connected graph by connecting each point to its k nearest neighbors.
+def _subpath_range(idx, starts):
+    for s in range(len(starts) - 1):
+        if starts[s] <= idx < starts[s + 1]:
+            return s, starts[s], starts[s + 1]
+    return len(starts) - 1, starts[-1], None
 
-    After k-nearest assignment, disconnected components are bridged by adding
-    *min_bridges* closest cross-component edges between each component pair,
-    ensuring the mesh is a single connected part with adequate structural joints.
 
-    When *subpath_starts* is provided, bridges on the incoming component are
-    placed at least *min_nail_gap* positions apart along the same subpath
-    (accounting for wrap-around on closed contours).
+def _is_same_subpath(i, j, starts):
+    si, _, _ = _subpath_range(i, starts)
+    sj, _, _ = _subpath_range(j, starts)
+    return si == sj
+
+
+def _path_neighbors(i, starts):
+    """Return (prev, next) indices along the same subpath, wrapping around."""
+    si, lo, hi = _subpath_range(i, starts)
+    if hi is None or hi - lo < 2:
+        return None, None
+    pos = i - lo
+    length = hi - lo
+    prev = lo + (pos - 1) % length
+    nxt = lo + (pos + 1) % length
+    return prev, nxt
+
+
+def find_mesh_edges(points, subpath_starts, min_bridges=3, min_nail_gap=4):
+    """Build a connected graph along path contours, bridged across components.
+
+    Primary edges follow path order: each nail connects to its predecessor and
+    successor along the same subpath (wrapping around for closed contours).
+    This ensures the mesh traces the letter shape.
+
+    Disconnected components (different contours / subpaths) are then bridged
+    by adding *min_bridges* closest cross-component edges, ensuring the mesh
+    is a single connected part.
+
     Returns a deduplicated list of ((x1,y1), (x2,y2)) edges.
     """
     n = len(points)
@@ -56,17 +82,15 @@ def find_mesh_edges(points, k=2, min_bridges=3, min_nail_gap=4, subpath_starts=N
         return []
 
     edges = set()
-    for i in range(n):
-        xi, yi = points[i]
-        dists = []
-        for j in range(n):
-            if j == i:
-                continue
-            xj, yj = points[j]
-            dists.append((math.hypot(xi - xj, yi - yj), j))
-        dists.sort(key=lambda x: x[0])
-        for _, j in dists[:k]:
-            edges.add(tuple(sorted((i, j))))
+
+    # Step 1 — path-order edges: each nail connects to its neighbors along the contour
+    if subpath_starts is not None:
+        for i in range(n):
+            prev, nxt = _path_neighbors(i, subpath_starts)
+            if prev is not None:
+                edges.add(tuple(sorted((i, prev))))
+            if nxt is not None:
+                edges.add(tuple(sorted((i, nxt))))
 
     # Build adjacency
     adj = {i: set() for i in range(n)}
@@ -89,9 +113,9 @@ def find_mesh_edges(points, k=2, min_bridges=3, min_nail_gap=4, subpath_starts=N
                     stack.extend(adj[v] - visited)
             components.append(comp)
 
-    # Bridge components by adding min_bridges closest cross-component edges.
-    # Each bridge uses a distinct nail on the incoming component (components[1])
-    # and respects min_nail_gap spacing along the same subpath.
+    # Step 2 — bridge disconnected components with closest cross-component edges.
+    # Each bridge uses a distinct nail on the incoming component and respects
+    # min_nail_gap spacing along the same subpath.
     while len(components) > 1:
         pairs = []
         for i in components[0]:
@@ -103,7 +127,7 @@ def find_mesh_edges(points, k=2, min_bridges=3, min_nail_gap=4, subpath_starts=N
 
         added = 0
         used_nails = set()
-        used_positions = {}  # subpath_idx -> list of positions along subpath
+        used_positions = {}
 
         for _, i, j in pairs:
             if added >= min_bridges:
@@ -279,13 +303,16 @@ def main():
     )
     parser.add_argument("--input", required=True, help="Input SVG file")
     parser.add_argument(
-        "--spacing", type=float, required=True, help="Nail spacing in mm"
+        "--spacing",
+        type=float,
+        default=10.0,
+        help="Gap between cylinder edges in mm (default: 10)",
     )
     parser.add_argument(
         "--hole-diameter",
         type=float,
-        required=True,
-        help="Inner diameter of hollow cylinders in mm",
+        default=5.0,
+        help="Inner diameter of hollow cylinders in mm (default: 5.0)",
     )
     parser.add_argument(
         "--wall-thickness",
@@ -306,16 +333,24 @@ def main():
         default=1,
         help="Corner strategy: 1=corners-first, 2=all-vertices (default: 1)",
     )
-    parser.add_argument("--output", required=True, help="Output OpenSCAD file path")
+    parser.add_argument(
+        "--output",
+        help="Output OpenSCAD file path (default: input filename with .scad)",
+    )
 
     args = parser.parse_args()
 
     if not os.path.isfile(args.input):
         parser.error(f"Input SVG file not found: {args.input}")
-    if args.spacing <= 0:
-        parser.error("--spacing must be positive")
+    if args.spacing < 0:
+        parser.error("--spacing must be non-negative")
     if args.hole_diameter <= 0:
         parser.error("--hole-diameter must be positive")
+
+    if not args.output:
+        args.output = os.path.splitext(os.path.basename(args.input))[0] + ".scad"
+    if not args.output.endswith(".scad"):
+        args.output += ".scad"
 
     try:
         path_data = parse_svg_paths(args.input)
@@ -340,7 +375,12 @@ def main():
             s1_before = len(nails_1)
             s2_before = len(nails_2)
             for strategy in (1, 2):
-                nails_with_t = compute_nail_positions(sp, args.spacing, strategy)
+                nails_with_t = compute_nail_positions(
+                    sp,
+                    args.spacing,
+                    strategy,
+                    hole_diameter=args.hole_diameter,
+                )
                 if nails_with_t:
                     positions = offset_nails_inward(
                         nails_with_t, sp, args.hole_diameter, all_subpaths=subpaths
@@ -382,8 +422,8 @@ def main():
         print("Error: No nail positions computed", file=sys.stderr)
         sys.exit(1)
 
-    edges_1 = find_mesh_edges(nails_1, k=2, subpath_starts=starts_1) if nails_1 else []
-    edges_2 = find_mesh_edges(nails_2, k=2, subpath_starts=starts_2) if nails_2 else []
+    edges_1 = find_mesh_edges(nails_1, subpath_starts=starts_1) if nails_1 else []
+    edges_2 = find_mesh_edges(nails_2, subpath_starts=starts_2) if nails_2 else []
 
     def _add_corner_bridges(nails, edges, corners, starts):
         if not corners:
@@ -439,7 +479,7 @@ def main():
     print(f"  Nail tubes (strategy 2): {len(nails_2)}")
     print(f"  Mesh edges (strategy 2): {len(edges_2)}")
     print(f"  Cylinder height:         {args.thickness} mm")
-    print(f"  Nail spacing:            {args.spacing} mm")
+    print(f"  Edge gap:               {args.spacing} mm")
     print(f"  Hole diameter:           {args.hole_diameter} mm")
     print(f"  Wall thickness:          {args.wall_thickness} mm")
     print(

@@ -42,15 +42,20 @@ def main():
     )
     parser.add_argument("--input", required=True, help="Input SVG outline file")
     parser.add_argument(
-        "--spacing", type=float, required=True, help="Nail spacing in mm"
+        "--spacing",
+        type=float,
+        default=10.0,
+        help="Gap between cylinder edges in mm (default: 10)",
     )
     parser.add_argument(
         "--hole-diameter",
+        default=3.0,
         type=float,
-        required=True,
-        help="Visual diameter of circles and bars in mm",
+        help="Visual diameter of circles and bars in mm (default: 3.0)",
     )
-    parser.add_argument("--output", required=True, help="Output SVG plan file")
+    parser.add_argument(
+        "--output", help="Output SVG plan file (default: input filename with .svg)"
+    )
     parser.add_argument(
         "--corner-strategy",
         type=int,
@@ -69,6 +74,13 @@ def main():
     if not os.path.isfile(args.input):
         parser.error(f"Input SVG file not found: {args.input}")
 
+    if not args.output:
+        args.output = (
+            "plan_" + os.path.splitext(os.path.basename(args.input))[0] + ".svg"
+        )
+    if not args.output.endswith(".svg"):
+        args.output += ".svg"
+
     try:
         path_data = parse_svg_paths(args.input)
     except Exception as e:
@@ -85,7 +97,10 @@ def main():
         subpaths, _ = _split_subpaths(pd["path"])
         for sp in subpaths:
             nails_with_t = compute_nail_positions(
-                sp, args.spacing, args.corner_strategy
+                sp,
+                args.spacing,
+                args.corner_strategy,
+                hole_diameter=args.hole_diameter,
             )
             if nails_with_t:
                 positions = offset_nails_inward(
@@ -152,7 +167,7 @@ def main():
     print(f"  Nail circles:      {total_nails}")
     print(f"  Contour edges:     {total_edges}")
     print(f"  Visual diameter:   {args.hole_diameter} mm")
-    print(f"  Nail spacing:      {args.spacing} mm")
+    print(f"  Edge gap:          {args.spacing} mm")
     print(
         f"  Corner strategy:   {'corners-first' if args.corner_strategy == 1 else 'all-vertices'}"
     )

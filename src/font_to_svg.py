@@ -37,9 +37,16 @@ def main():
     parser.add_argument(
         "--height", type=float, default=170.0, help="Canvas height in mm (default: 170)"
     )
-    parser.add_argument("--output", required=True, help="Output SVG file path")
+    parser.add_argument(
+        "--output", help="Output SVG file path (default: letter_{letter}.svg)"
+    )
 
     args = parser.parse_args()
+
+    if not args.output:
+        args.output = f"letter_{args.letter}.svg"
+    if not args.output.endswith(".svg"):
+        args.output += ".svg"
 
     if not args.letter or len(args.letter) > 1:
         parser.error("--letter must be a single character")

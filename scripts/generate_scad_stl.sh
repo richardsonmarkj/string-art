@@ -38,6 +38,21 @@ if $RENDER_STL; then
             break
         fi
     done
+    # If no --output was given, derive it the same way the Python script does
+    if [[ -z "$SCAD_FILE" ]]; then
+        for i in "${!POSITIONAL_ARGS[@]}"; do
+            if [[ "${POSITIONAL_ARGS[$i]}" == "--input" ]] && [[ $((i + 1)) -lt ${#POSITIONAL_ARGS[@]} ]]; then
+                INPUT_FILE="${POSITIONAL_ARGS[$((i + 1))]}"
+                BASENAME="$(basename "$INPUT_FILE")"
+                SCAD_FILE="${BASENAME%.*}.scad"
+                break
+            fi
+        done
+    fi
+    # The Python tool always appends .scad; ensure we look for the right path
+    if [[ -n "$SCAD_FILE" && "$SCAD_FILE" != *.scad ]]; then
+        SCAD_FILE="${SCAD_FILE}.scad"
+    fi
 
     OPENSCAD=""
     if command -v openscad &>/dev/null; then

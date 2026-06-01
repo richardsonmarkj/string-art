@@ -6,6 +6,7 @@ from pathlib import Path
 MAC_FONT_DIRS = [
     "/System/Library/Fonts",
     "/Library/Fonts",
+    "/Library/Fonts/Microsoft",
     os.path.expanduser("~/Library/Fonts"),
 ]
 
@@ -80,6 +81,7 @@ def system_font_path(font_name):
                 fc_family
                 and fc_path
                 and os.path.isfile(fc_path)
+                and os.path.getsize(fc_path) > 0
                 and fc_path != "/dev/null"
                 and not fc_path.endswith(".pcf.gz")
             ):
@@ -165,16 +167,75 @@ import os
 import xml.etree.ElementTree as ET
 
 import svgpathtools
+import numpy as np
+from svgpathtools.parser import parse_transform
 
 
 CORNER_ANGLE_THRESHOLD = 30
 
 
+def _apply_matrix_to_point(z, matrix):
+    x, y = z.real, z.imag
+    return complex(
+        matrix[0, 0] * x + matrix[0, 1] * y + matrix[0, 2],
+        matrix[1, 0] * x + matrix[1, 1] * y + matrix[1, 2],
+    )
+
+
+def _apply_matrix_to_path(path, matrix):
+    new_segs = []
+    for seg in path:
+        if isinstance(seg, svgpathtools.Arc):
+            for c in seg.as_cubic_curves():
+                pts = c.bpoints()
+                new_pts = [_apply_matrix_to_point(p, matrix) for p in pts]
+                new_segs.append(svgpathtools.CubicBezier(*new_pts))
+        else:
+            pts = seg.bpoints()
+            new_pts = [_apply_matrix_to_point(p, matrix) for p in pts]
+            new_segs.append(type(seg)(*new_pts))
+    return svgpathtools.Path(*new_segs)
+
+
+def _svg_ancestor_transforms(svg_path):
+    tree = ET.parse(svg_path)
+    root = tree.getroot()
+
+    ns = "http://www.w3.org/2000/svg"
+    results = []
+
+    def _walk(node, transforms):
+        tag = node.tag.split("}")[-1] if "}" in node.tag else node.tag
+        t = node.get("transform")
+        current = transforms + [t] if t else transforms
+        if tag == "path":
+            results.append((node, current))
+        for child in node:
+            _walk(child, current)
+
+    _walk(root, [])
+    return results
+
+
 def parse_svg_paths(svg_path):
     paths, attributes = svgpathtools.svg2paths(svg_path)
+
+    transforms_by_elem = {}
+    for elem, t_strs in _svg_ancestor_transforms(svg_path):
+        d = elem.get("d", "").strip()
+        identity = np.eye(3)
+        matrix = identity
+        for t_str in t_strs:
+            m = parse_transform(t_str)
+            matrix = m @ matrix
+        transforms_by_elem[d] = matrix if not np.allclose(matrix, identity) else None
+
     path_data = []
-    for i, path in enumerate(paths):
-        attrs = attributes[i] if i < len(attributes) else {}
+    for i, (path, attrs) in enumerate(zip(paths, attributes)):
+        d = attrs.get("d", "")
+        matrix = transforms_by_elem.get(d)
+        if matrix is not None:
+            path = _apply_matrix_to_path(path, matrix)
         path_data.append(
             {
                 "path": path,
@@ -187,6 +248,8 @@ def parse_svg_paths(svg_path):
 
 
 def is_corner(prev_seg, next_seg, threshold=CORNER_ANGLE_THRESHOLD):
+    if prev_seg.length() < 0.001 or next_seg.length() < 0.001:
+        return False
     try:
         d1 = prev_seg.derivative(1)
         if abs(d1) < 1e-10:
@@ -258,12 +321,13 @@ def _point_from_arc(arc_table, target_arc):
     return x0 + f * (x1 - x0), y0 + f * (y1 - y0)
 
 
-def compute_nail_positions(path, spacing, strategy):
+def compute_nail_positions(path, spacing, strategy, hole_diameter=0):
     total = path.length()
     if total < 0.01:
         return []
 
     arc_table = _build_arc_table(path)
+    effective_spacing = spacing + hole_diameter
 
     if strategy == 1:
         vertices = get_corner_vertices(path)
@@ -292,7 +356,7 @@ def compute_nail_positions(path, spacing, strategy):
             if abs(arc_b - arc_a) < 1e-10:
                 continue
             arc_len = arc_b - arc_a
-            num = max(0, int(arc_len / spacing + 0.5) - 1)
+            num = max(0, int(arc_len / effective_spacing + 0.5) - 1)
             for j in range(1, num + 1):
                 target_arc = arc_a + arc_len * j / (num + 1)
                 x, y = _point_from_arc(arc_table, target_arc)

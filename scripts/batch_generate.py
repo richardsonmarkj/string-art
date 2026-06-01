@@ -13,7 +13,8 @@ LETTERS = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 FONT = "Arial"
 SPACING = 10
-HOLE_DIAMETER = 3
+SVG_HOLE_DIAMETER = 3
+STL_HOLE_DIAMETER = 5
 THICKNESS = 5
 CORNER_STRATEGY = 1
 OUTPUT_DIR = "output"
@@ -59,16 +60,39 @@ def main():
         "--font", default=FONT, help=f"System font name (default: {FONT})"
     )
     parser.add_argument(
+        "--font-file",
+        default=None,
+        help="Path to TTF/OTF font file (overrides --font)",
+    )
+    parser.add_argument(
         "--spacing",
         type=float,
         default=SPACING,
-        help=f"Nail spacing in mm (default: {SPACING})",
+        help=f"Nail spacing in mm for both mesh and plan (default: {SPACING})",
     )
     parser.add_argument(
-        "--hole-diameter",
+        "--mesh-spacing",
         type=float,
-        default=HOLE_DIAMETER,
-        help=f"Hole diameter in mm (default: {HOLE_DIAMETER})",
+        default=20.0,
+        help="Nail spacing in mm for mesh model (default: 20)",
+    )
+    parser.add_argument(
+        "--plan-spacing",
+        type=float,
+        default=10.0,
+        help="Nail spacing in mm for plan SVG (default: 10)",
+    )
+    parser.add_argument(
+        "--stl-hole-diameter",
+        type=float,
+        default=STL_HOLE_DIAMETER,
+        help=f"Hole diameter in mm for STL (default: {STL_HOLE_DIAMETER})",
+    )
+    parser.add_argument(
+        "--plan-hole-diameter",
+        type=float,
+        default=SVG_HOLE_DIAMETER,
+        help=f"Hole diameter in mm for Plan SVG (default: {SVG_HOLE_DIAMETER})",
     )
     parser.add_argument(
         "--thickness",
@@ -99,6 +123,11 @@ def main():
         help="Generate 2D plan SVG (svg_to_nail_plan_svg)",
     )
     parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Generate both mesh SCAD/STL and plan SVG in one pass",
+    )
+    parser.add_argument(
         "--wall-thickness",
         type=float,
         default=1.0,
@@ -107,10 +136,11 @@ def main():
     parser.add_argument("--skip-stl", action="store_true", help="Skip STL rendering")
     args = parser.parse_args()
 
-    if not args.mesh and not args.plan:
-        parser.error("Specify --mesh or --plan")
-    if args.mesh and args.plan:
-        parser.error("--mesh and --plan are mutually exclusive")
+    if args.all:
+        if args.mesh or args.plan:
+            parser.error("--all is exclusive with --mesh and --plan")
+    elif not args.mesh and not args.plan:
+        parser.error("Specify --mesh, --plan, or --all")
 
     letters = args.letters if args.letters else LETTERS
     out_dir = os.path.join(REPO_DIR, args.output_dir)
@@ -125,75 +155,72 @@ def main():
 
     font_to_svg = os.path.join(REPO_DIR, "src", "font_to_svg.py")
 
-    if args.plan:
-        gen_script = os.path.join(REPO_DIR, "src", "svg_to_nail_plan_svg.py")
-        label = "PLAN"
-        prefix = "plan_"
-        ext = ".svg"
-    else:
-        gen_script = os.path.join(REPO_DIR, "src", "svg_to_mesh_openscad.py")
-        label = "MESH"
-        prefix = "mesh_"
-        ext = ".scad"
+    def _build_svg_cmd(letter, svg_path):
+        cmd = [
+            sys.executable,
+            font_to_svg,
+            "--letter",
+            letter,
+            "--output",
+            svg_path,
+        ]
+        if args.font_file:
+            cmd += ["--font-file", args.font_file]
+        else:
+            cmd += ["--font", args.font]
+        return cmd
+
+    def _build_mesh_cmd(svg_path, scad_path):
+        return [
+            sys.executable,
+            os.path.join(REPO_DIR, "src", "svg_to_mesh_openscad.py"),
+            "--input",
+            svg_path,
+            "--spacing",
+            str(args.mesh_spacing),
+            "--hole-diameter",
+            str(args.stl_hole_diameter),
+            "--wall-thickness",
+            str(args.wall_thickness),
+            "--thickness",
+            str(args.thickness),
+            "--corner-strategy",
+            str(args.corner_strategy),
+            "--output",
+            scad_path,
+        ]
+
+    def _build_plan_cmd(svg_path, plan_path):
+        return [
+            sys.executable,
+            os.path.join(REPO_DIR, "src", "svg_to_nail_plan_svg.py"),
+            "--input",
+            svg_path,
+            "--spacing",
+            str(args.plan_spacing),
+            "--hole-diameter",
+            str(args.plan_hole_diameter),
+            "--corner-strategy",
+            str(args.corner_strategy),
+            "--output",
+            plan_path,
+        ]
 
     for letter in letters:
         print(f"\n[{letter}]")
         svg_path = os.path.join(out_dir, f"letter_{letter}.svg")
-        out_path = os.path.join(out_dir, f"{prefix}{letter}{ext}")
-        stl_path = os.path.join(out_dir, f"{prefix}{letter}.stl")
+        run(_build_svg_cmd(letter, svg_path), "SVG")
 
-        run(
-            [
-                sys.executable,
-                font_to_svg,
-                "--letter",
-                letter,
-                "--font",
-                args.font,
-                "--output",
-                svg_path,
-            ],
-            "SVG",
-        )
+        if args.mesh or args.all:
+            scad_path = os.path.join(out_dir, f"mesh_{letter}.scad")
+            run(_build_mesh_cmd(svg_path, scad_path), "MESH")
+            if openscad:
+                stl_path = os.path.join(out_dir, f"mesh_{letter}.stl")
+                run([openscad, "-o", stl_path, scad_path], "STL")
 
-        if args.plan:
-            cmd = [
-                sys.executable,
-                gen_script,
-                "--input",
-                svg_path,
-                "--spacing",
-                str(args.spacing),
-                "--hole-diameter",
-                str(args.hole_diameter),
-                "--corner-strategy",
-                str(args.corner_strategy),
-                "--output",
-                out_path,
-            ]
-        else:
-            cmd = [
-                sys.executable,
-                gen_script,
-                "--input",
-                svg_path,
-                "--spacing",
-                str(args.spacing),
-                "--hole-diameter",
-                str(args.hole_diameter),
-                "--wall-thickness",
-                str(args.wall_thickness),
-                "--thickness",
-                str(args.thickness),
-                "--corner-strategy",
-                str(args.corner_strategy),
-                "--output",
-                out_path,
-            ]
-        run(cmd, label)
-
-        if openscad and not args.plan and ext == ".scad":
-            run([openscad, "-o", stl_path, out_path], "STL")
+        if args.plan or args.all:
+            plan_path = os.path.join(out_dir, f"plan_{letter}.svg")
+            run(_build_plan_cmd(svg_path, plan_path), "PLAN")
 
     print(f"\nDone. Files in {out_dir}")
 

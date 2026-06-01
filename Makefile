@@ -1,4 +1,4 @@
-.PHONY: all install test clean lint example plan-example batch batch-plan
+.PHONY: all install test clean lint mesh-example plan-example mesh-batch plan-batch all-batch
 
 install:
 	pip3 install -r requirements.txt
@@ -28,7 +28,7 @@ mesh-example:
 		--output examples/output/letter_A.svg
 	python3 src/svg_to_mesh_openscad.py \
 		--input examples/output/letter_A.svg \
-		--spacing 10 \
+		--spacing 20 \
 		--hole-diameter 5 \
 		--wall-thickness 1 \
 		--thickness 5 \
@@ -46,12 +46,6 @@ mesh-example:
 	@echo "  SCAD: examples/output/mesh_A.scad"
 	@test -f examples/output/mesh_A.stl && echo "  STL:  examples/output/mesh_A.stl"
 
-# Batch generate mesh models for a set of letters (default: A-Z)
-LETTERS ?= A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
-mesh-batch:
-	@mkdir -p output
-	python3 scripts/batch_generate.py --mesh --letters $(LETTERS) --spacing 10 --hole-diameter 5 --wall-thickness 1
-
 plan-example:
 	@mkdir -p examples/output
 	python3 src/font_to_svg.py \
@@ -60,7 +54,7 @@ plan-example:
 		--output examples/output/letter_A.svg
 	python3 src/svg_to_nail_plan_svg.py \
 		--input examples/output/letter_A.svg \
-		--spacing 10 \
+		--spacing 20 \
 		--hole-diameter 3 \
 		--corner-strategy 1 \
 		--output examples/output/plan_A.svg
@@ -68,7 +62,29 @@ plan-example:
 	@echo "  SVG:  examples/output/letter_A.svg"
 	@echo "  Plan: examples/output/plan_A.svg"
 
+# Batch generate all three — mesh SCAD, STL, and plan SVG (default: A-Z)
+ALL_LETTERS ?= A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
+ARIAL_LETTERS ?= A B C D E F G H J L M N O P S T U V W X Y Z
+CGOTHIC_LETTERS ?= K Q R
+LUCIDA_LETTERS ?= I
+CG_FONT_FILE ?=
+
+gs-batch:
+	@mkdir -p output
+	python3 scripts/batch_generate.py --all --letters $(LUCIDA_LETTERS) --font "Lucida Console"
+	python3 scripts/batch_generate.py --all --letters $(ARIAL_LETTERS) --font "Arial"
+	python3 scripts/batch_generate.py --all --letters $(CGOTHIC_LETTERS) --font-file "./internal/CenturyGothic.ttf"
+
+all-batch:
+	@mkdir -p output
+	python3 scripts/batch_generate.py --all --letters $(LETTERS)
+
+# Batch generate just meshes (scad/stl)
+mesh-batch:
+	@mkdir -p output
+	python3 scripts/batch_generate.py --mesh --letters $(ALL_LETTERS)
+
 # Batch generate plan SVGs
 plan-batch:
 	@mkdir -p output
-	python3 scripts/batch_generate.py --plan --letters $(LETTERS) --spacing 10 --hole-diameter 3
+	python3 scripts/batch_generate.py --plan --letters $(ALL_LETTERS)

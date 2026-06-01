@@ -103,6 +103,7 @@ The Makefile auto-detects OpenSCAD on macOS (`/Applications/OpenSCAD.app/Content
 ```bash
 ./scripts/generate_svg.sh --letter A --font Arial --output letter_A.svg
 ./scripts/generate_scad_stl.sh --input letter_A.svg --spacing 10 --hole-diameter 5 --stl
+./scripts/generate_plan_svg.sh --input letter_A.svg --spacing 10 --hole-diameter 3 --output plan_A.svg
 ```
 
 ## Output Types
@@ -157,6 +158,7 @@ src/
 scripts/
   generate_svg.sh           # Shell wrapper: font → SVG
   generate_scad_stl.sh      # Shell wrapper: SVG → mesh SCAD (+ optional STL)
+  generate_plan_svg.sh      # Shell wrapper: SVG → nail plan SVG
   batch_generate.py         # Batch processing for multiple letters
 tests/
   test_font_to_svg.py
