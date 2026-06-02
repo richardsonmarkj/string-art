@@ -23,7 +23,7 @@ OPENSCAD := $(shell command -v openscad 2>/dev/null || [ -x /Applications/OpenSC
 mesh-example:
 	@mkdir -p examples/output
 	python3 src/font_to_svg.py \
-		--letter S \
+		--letter J \
 		--font Arial \
 		--output examples/output/letter_J.svg
 	python3 src/svg_to_mesh_openscad.py \
@@ -36,7 +36,7 @@ mesh-example:
 		--output examples/output/mesh_J.scad
 	@if [ -n "$(OPENSCAD)" ]; then \
 		echo "Rendering STL..."; \
-		$(OPENSCAD) -o examples/output/mesh_A.stl examples/output/mesh_J.scad; \
+		$(OPENSCAD) -o examples/output/mesh_J.stl examples/output/mesh_J.scad; \
 		echo "STL saved to examples/output/mesh_J.stl"; \
 	else \
 		echo "Mesh example created (no OpenSCAD found for STL render)."; \

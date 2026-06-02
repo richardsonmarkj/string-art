@@ -46,10 +46,11 @@ This installs: `svgwrite`, `svgpathtools`, `fonttools`, `numpy`, `pytest`.
 ### Quick start
 
 ```bash
-make example
+make mesh-example
 ```
 
-Generates a letter A mesh model (SVG + SCAD + optional STL) in `examples/output/`.
+Generates a letter J mesh model (SCAD + optional STL).
+Use `make plan-example` for a 2D nail plan blueprint. (SVG + SCAD + optional STL) in `examples/output/`.
 
 ### Step by step
 
@@ -119,7 +120,14 @@ All SCAD files import the original SVG via OpenSCAD's `import()` for perfect bez
 ## Corner Strategies
 
 - **Strategy 1 (corners-first)** — Nails at sharp corners first, then distributed evenly. Guarantees every corner gets a nail.
-- **Strategy 2 (all-vertices)** — Distributed evenly using all path vertices as candidates, ignoring corner angle calculations.
+- **Strategy 2 (all-vertices)** — Distributed evenly using all path vertices as candidates, ignoring corner angle calculations (default).
+
+## Spacing
+
+`--spacing` controls the **edge-to-edge gap** between adjacent nail cylinders, not the center-to-center distance.
+The effective center-to-center spacing is `spacing + hole_diameter` on straight segments, and
+`spacing × 0.5 + hole_diameter` on curves (tighter on curves for smoother outlines). Use `--spacing 0`
+for cylinders that touch edge-to-edge.
 
 ## Batch Processing
 
@@ -141,8 +149,9 @@ python3 scripts/batch_generate.py --skip-stl
 
 Makefile shortcuts:
 ```bash
-make batch       # mesh models for A-Z
-make batch-plan  # plan SVGs for A-Z
+make mesh-batch  # mesh models for A-Z
+make plan-batch  # plan SVGs for A-Z
+make all-batch   # both mesh + plan for A-Z
 ```
 
 Output goes to `output/` by default (gitignored).

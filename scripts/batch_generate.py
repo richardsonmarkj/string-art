@@ -16,7 +16,7 @@ SPACING = 25
 SVG_HOLE_DIAMETER = 3
 STL_HOLE_DIAMETER = 5
 THICKNESS = 5
-CORNER_STRATEGY = 1
+CORNER_STRATEGY = 2
 OUTPUT_DIR = "output"
 
 
@@ -68,19 +68,19 @@ def main():
         "--spacing",
         type=float,
         default=SPACING,
-        help=f"Nail spacing in mm for both mesh and plan (default: {SPACING})",
+        help=f"Gap between nail edges in mm for both mesh and plan (default: {SPACING})",
     )
     parser.add_argument(
         "--mesh-spacing",
         type=float,
         default=20.0,
-        help="Nail spacing in mm for mesh model (default: 20)",
+        help="Gap between nail edges in mm for mesh model (default: 20)",
     )
     parser.add_argument(
         "--plan-spacing",
         type=float,
         default=10.0,
-        help="Nail spacing in mm for plan SVG (default: 10)",
+        help="Gap between nail edges in mm for plan SVG (default: 10)",
     )
     parser.add_argument(
         "--stl-hole-diameter",
