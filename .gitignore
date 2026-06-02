@@ -5,7 +5,9 @@ __pycache__/
 .ruff_cache/
 .DS_Store
 output/
-examples/output/
-examples/tmp/
+examples/
+examples/
 *.stl
 internal/
+*.scad
+*.svg

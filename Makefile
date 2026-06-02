@@ -23,28 +23,28 @@ OPENSCAD := $(shell command -v openscad 2>/dev/null || [ -x /Applications/OpenSC
 mesh-example:
 	@mkdir -p examples/output
 	python3 src/font_to_svg.py \
-		--letter A \
+		--letter S \
 		--font Arial \
-		--output examples/output/letter_A.svg
+		--output examples/output/letter_J.svg
 	python3 src/svg_to_mesh_openscad.py \
-		--input examples/output/letter_A.svg \
+		--input examples/output/letter_J.svg \
 		--spacing 20 \
 		--hole-diameter 5 \
 		--wall-thickness 1 \
 		--thickness 5 \
-		--corner-strategy 1 \
-		--output examples/output/mesh_A.scad
+		--corner-strategy 2 \
+		--output examples/output/mesh_J.scad
 	@if [ -n "$(OPENSCAD)" ]; then \
 		echo "Rendering STL..."; \
-		$(OPENSCAD) -o examples/output/mesh_A.stl examples/output/mesh_A.scad; \
-		echo "STL saved to examples/output/mesh_A.stl"; \
+		$(OPENSCAD) -o examples/output/mesh_A.stl examples/output/mesh_J.scad; \
+		echo "STL saved to examples/output/mesh_J.stl"; \
 	else \
 		echo "Mesh example created (no OpenSCAD found for STL render)."; \
 	fi
 	@echo ""
-	@echo "  SVG:  examples/output/letter_A.svg"
-	@echo "  SCAD: examples/output/mesh_A.scad"
-	@test -f examples/output/mesh_A.stl && echo "  STL:  examples/output/mesh_A.stl"
+	@echo "  SVG:  examples/output/letter_J.svg"
+	@echo "  SCAD: examples/output/mesh_J.scad"
+	@test -f examples/output/mesh_J.stl && echo "  STL:  examples/output/mesh_J.stl"
 
 plan-example:
 	@mkdir -p examples/output
@@ -71,13 +71,13 @@ CG_FONT_FILE ?=
 
 gs-batch:
 	@mkdir -p output
-	python3 scripts/batch_generate.py --all --letters $(LUCIDA_LETTERS) --font "Lucida Console"
-	python3 scripts/batch_generate.py --all --letters $(ARIAL_LETTERS) --font "Arial"
-	python3 scripts/batch_generate.py --all --letters $(CGOTHIC_LETTERS) --font-file "./internal/CenturyGothic.ttf"
+	python3 scripts/batch_generate.py --all --letters $(LUCIDA_LETTERS) --font "Lucida Console" --corner-strategy 2
+	python3 scripts/batch_generate.py --all --letters $(ARIAL_LETTERS) --font "Arial" --corner-strategy 2
+	python3 scripts/batch_generate.py --all --letters $(CGOTHIC_LETTERS) --font-file "./internal/CenturyGothic.ttf" --corner-strategy 2
 
 all-batch:
 	@mkdir -p output
-	python3 scripts/batch_generate.py --all --letters $(LETTERS)
+	python3 scripts/batch_generate.py --all --letters $(ALL_LETTERS)
 
 # Batch generate just meshes (scad/stl)
 mesh-batch:

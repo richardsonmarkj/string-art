@@ -60,8 +60,8 @@ def main():
         "--corner-strategy",
         type=int,
         choices=[1, 2],
-        default=1,
-        help="Corner strategy: 1=corners-first, 2=all-vertices (default: 1)",
+        default=2,
+        help="Corner strategy: 1=corners-first, 2=all-vertices (default: 2)",
     )
     parser.add_argument(
         "--no-outline", action="store_true", help="Omit the original faint outline"

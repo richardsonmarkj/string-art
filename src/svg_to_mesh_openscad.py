@@ -174,7 +174,7 @@ def generate_scad_mesh(
     hole_diameter,
     thickness,
     wall_thickness,
-    default_strategy,
+    chosen_strategy,
     scad_path,
     canvas_height,
 ):
@@ -210,7 +210,7 @@ def generate_scad_mesh(
         f"thickness = {thickness}; // cylinder height in mm",
         f"hole_d = {hole_diameter}; // inner diameter of hollow cylinders in mm",
         f"wall = {wall_thickness}; // wall thickness of hollow cylinders in mm",
-        f"corner_strategy = {default_strategy}; // 1=corners-first, 2=all-vertices",
+        f"corner_strategy = {chosen_strategy}; // 1=corners-first, 2=all-vertices",
         f"",
         f"module outer_cylinder(x, y) {{",
         f"    translate([x, y, 0])",
@@ -330,8 +330,8 @@ def main():
         "--corner-strategy",
         type=int,
         choices=[1, 2],
-        default=1,
-        help="Corner strategy: 1=corners-first, 2=all-vertices (default: 1)",
+        default=2,
+        help="Corner strategy: 1=corners-first, 2=all-vertices (default: 2)",
     )
     parser.add_argument(
         "--output",
@@ -422,8 +422,8 @@ def main():
         print("Error: No nail positions computed", file=sys.stderr)
         sys.exit(1)
 
-    edges_1 = find_mesh_edges(nails_1, subpath_starts=starts_1) if nails_1 else []
-    edges_2 = find_mesh_edges(nails_2, subpath_starts=starts_2) if nails_2 else []
+    edges_1 = find_mesh_edges(nails_1, subpath_starts=starts_1)
+    edges_2 = find_mesh_edges(nails_2, subpath_starts=starts_2)
 
     def _add_corner_bridges(nails, edges, corners, starts):
         if not corners:

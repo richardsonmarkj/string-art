@@ -162,8 +162,6 @@ def glyph_to_svg_path(letter, font_path, canvas_w=170, canvas_h=170, padding=0.1
 
 # ── SVG Path Parsing & Nail Geometry (shared by svg_to_* tools) ──
 
-import math
-import os
 import xml.etree.ElementTree as ET
 
 import svgpathtools
@@ -201,7 +199,6 @@ def _svg_ancestor_transforms(svg_path):
     tree = ET.parse(svg_path)
     root = tree.getroot()
 
-    ns = "http://www.w3.org/2000/svg"
     results = []
 
     def _walk(node, transforms):
@@ -321,6 +318,23 @@ def _point_from_arc(arc_table, target_arc):
     return x0 + f * (x1 - x0), y0 + f * (y1 - y0)
 
 
+def _seg_intervals(path):
+    intervals = []
+    cum = 0.0
+    n = len(path)
+    for i, seg in enumerate(path):
+        seg_len = seg.length()
+        is_line = isinstance(seg, svgpathtools.Line)
+        if is_line:
+            prev_is_curve = not isinstance(path[(i - 1) % n], svgpathtools.Line)
+            next_is_curve = not isinstance(path[(i + 1) % n], svgpathtools.Line)
+            if prev_is_curve and next_is_curve:
+                is_line = False
+        intervals.append((cum, cum + seg_len, is_line))
+        cum += seg_len
+    return intervals
+
+
 def compute_nail_positions(path, spacing, strategy, hole_diameter=0):
     total = path.length()
     if total < 0.01:
@@ -348,6 +362,10 @@ def compute_nail_positions(path, spacing, strategy, hole_diameter=0):
         x, y = _point_from_arc(arc_table, t * total)
         must_have_arcs.append((t * total, x, y, t))
 
+    intervals = _seg_intervals(path)
+    curve_spacing = spacing * 0.5 + hole_diameter
+    straight_spacing = effective_spacing
+
     raw = []
     for i, (arc_a, x_a, y_a, t_a) in enumerate(must_have_arcs):
         raw.append((x_a, y_a, t_a))
@@ -355,10 +373,32 @@ def compute_nail_positions(path, spacing, strategy, hole_diameter=0):
             arc_b = must_have_arcs[i + 1][0]
             if abs(arc_b - arc_a) < 1e-10:
                 continue
-            arc_len = arc_b - arc_a
-            num = max(0, int(arc_len / effective_spacing + 0.5) - 1)
-            for j in range(1, num + 1):
-                target_arc = arc_a + arc_len * j / (num + 1)
+
+            local = []
+            for start, end, is_straight in intervals:
+                if end <= arc_a:
+                    continue
+                if start >= arc_b:
+                    break
+                seg_start = max(start, arc_a)
+                seg_end = min(end, arc_b)
+                if seg_end - seg_start > 1e-10:
+                    local.append((seg_start, seg_end, is_straight))
+
+            total_in_seg = 0
+            for seg_start, seg_end, is_straight in local:
+                seg_arc_len = seg_end - seg_start
+                s = straight_spacing if is_straight else curve_spacing
+                num = max(0, int(seg_arc_len / s + 0.5) - 1)
+                for j in range(1, num + 1):
+                    target_arc = seg_start + seg_arc_len * j / (num + 1)
+                    x, y = _point_from_arc(arc_table, target_arc)
+                    raw.append((x, y, 0.0))
+                total_in_seg += num
+
+            interval_len = arc_b - arc_a
+            if total_in_seg == 0 and interval_len > 2 * spacing:
+                target_arc = (arc_a + arc_b) / 2
                 x, y = _point_from_arc(arc_table, target_arc)
                 raw.append((x, y, 0.0))
 
