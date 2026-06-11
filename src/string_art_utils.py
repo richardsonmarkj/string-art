@@ -318,32 +318,22 @@ def _point_from_arc(arc_table, target_arc):
     return x0 + f * (x1 - x0), y0 + f * (y1 - y0)
 
 
-def _seg_intervals(path):
-    intervals = []
-    cum = 0.0
-    n = len(path)
-    for i, seg in enumerate(path):
-        seg_len = seg.length()
-        is_line = isinstance(seg, svgpathtools.Line)
-        if is_line:
-            prev_is_curve = not isinstance(path[(i - 1) % n], svgpathtools.Line)
-            next_is_curve = not isinstance(path[(i + 1) % n], svgpathtools.Line)
-            if prev_is_curve and next_is_curve:
-                is_line = False
-        intervals.append((cum, cum + seg_len, is_line))
-        cum += seg_len
-    return intervals
 
-
-def compute_nail_positions(path, spacing, strategy, hole_diameter=0):
+def compute_nail_positions(path, hole_diameter=0, max_spacing=None):
     total = path.length()
     if total < 0.01:
         return []
 
     arc_table = _build_arc_table(path)
-    effective_spacing = spacing + hole_diameter
 
-    if strategy == 1:
+    # Step 1: compute must-have nails (auto-strategy)
+    has_real_curve = any(
+        not isinstance(seg, svgpathtools.Line)
+        and (chord := abs(seg.point(1) - seg.point(0))) > 0.001
+        and seg.length() / chord > 1.01
+        for seg in path
+    )
+    if not has_real_curve:
         vertices = get_corner_vertices(path)
     else:
         cum = 0.0
@@ -357,66 +347,79 @@ def compute_nail_positions(path, spacing, strategy, hole_diameter=0):
     if 1.0 not in must_have_ts:
         must_have_ts.append(1.0)
 
-    must_have_arcs = []
-    for t in must_have_ts:
-        x, y = _point_from_arc(arc_table, t * total)
-        must_have_arcs.append((t * total, x, y, t))
+    raw = [(x, y, t) for _, x, y, t in (
+        (t * total, *_point_from_arc(arc_table, t * total), t)
+        for t in must_have_ts
+    )]
 
-    intervals = _seg_intervals(path)
-    curve_spacing = spacing * 0.5 + hole_diameter
-    straight_spacing = effective_spacing
+    if not raw:
+        return []
 
-    raw = []
-    for i, (arc_a, x_a, y_a, t_a) in enumerate(must_have_arcs):
-        raw.append((x_a, y_a, t_a))
-        if i < len(must_have_arcs) - 1:
-            arc_b = must_have_arcs[i + 1][0]
-            if abs(arc_b - arc_a) < 1e-10:
-                continue
+    # Strip t=1.0 duplicate (same position as t=0)
+    raw = [p for p in raw if p[2] < 1.0]
 
-            local = []
-            for start, end, is_straight in intervals:
-                if end <= arc_a:
-                    continue
-                if start >= arc_b:
-                    break
-                seg_start = max(start, arc_a)
-                seg_end = min(end, arc_b)
-                if seg_end - seg_start > 1e-10:
-                    local.append((seg_start, seg_end, is_straight))
+    cluster_threshold = min(8, total * 0.15)
 
-            total_in_seg = 0
-            for seg_start, seg_end, is_straight in local:
-                seg_arc_len = seg_end - seg_start
-                s = straight_spacing if is_straight else curve_spacing
-                num = max(0, int(seg_arc_len / s + 0.5) - 1)
-                for j in range(1, num + 1):
-                    target_arc = seg_start + seg_arc_len * j / (num + 1)
+    clusters = [[raw[0]]]
+    for p in raw[1:]:
+        lx, ly, _ = clusters[-1][-1]
+        if math.hypot(p[0] - lx, p[1] - ly) < cluster_threshold:
+            clusters[-1].append(p)
+        else:
+            clusters.append([p])
+
+    if len(clusters) > 1:
+        fx, fy, _ = clusters[0][0]
+        lx, ly, _ = clusters[-1][-1]
+        if math.hypot(lx - fx, ly - fy) < cluster_threshold:
+            clusters[-1].extend(clusters.pop(0))
+
+    must = []
+    for cluster in clusters:
+        cx = sum(p[0] for p in cluster) / len(cluster)
+        cy = sum(p[1] for p in cluster) / len(cluster)
+        best = min(cluster, key=lambda p: math.hypot(p[0] - cx, p[1] - cy))
+        must.append(best)
+
+    if max_spacing is not None and max_spacing > 0 and len(must) > 1:
+        must.sort(key=lambda p: p[2])
+
+        nail_arcs = [t * total for _, _, t in must]
+        n_must = len(must)
+
+        filled = [must[0]]
+        for i in range(n_must):
+            a1 = nail_arcs[i]
+            a2 = nail_arcs[(i + 1) % n_must]
+            if i < n_must - 1:
+                gap = a2 - a1
+            else:
+                gap = total - a1 + a2
+
+            if gap > max_spacing:
+                n = math.ceil(gap / max_spacing)
+                step = gap / n
+                for j in range(1, n):
+                    target_arc = a1 + step * j
+                    if target_arc > total:
+                        target_arc -= total
                     x, y = _point_from_arc(arc_table, target_arc)
-                    raw.append((x, y, 0.0))
-                total_in_seg += num
+                    filled.append((x, y, target_arc / total))
 
-            interval_len = arc_b - arc_a
-            if total_in_seg == 0 and interval_len > 2 * spacing:
-                target_arc = (arc_a + arc_b) / 2
-                x, y = _point_from_arc(arc_table, target_arc)
-                raw.append((x, y, 0.0))
+            if i < n_must - 1:
+                filled.append(must[i + 1])
 
-    cleaned = []
-    for x, y, t in raw:
-        if cleaned:
-            lx, ly, _ = cleaned[-1]
-            if math.hypot(x - lx, y - ly) < 0.5:
-                continue
-        cleaned.append((x, y, t))
+        result = filled
+    else:
+        result = must
 
-    if len(cleaned) > 1:
-        fx, fy, _ = cleaned[0]
-        lx, ly, _ = cleaned[-1]
-        if math.hypot(lx - fx, ly - fy) < 0.5:
-            cleaned.pop()
+    if len(result) < 3:
+        result = []
+        for i in range(3):
+            x, y = _point_from_arc(arc_table, i * total / 3)
+            result.append((x, y, i / 3))
 
-    return cleaned
+    return result
 
 
 def _split_subpaths(path):

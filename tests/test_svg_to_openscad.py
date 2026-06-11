@@ -60,15 +60,15 @@ class TestIsCorner:
 
 
 class TestComputeNailPositions:
-    def test_square_strategy1_has_at_least_4_nails(self):
+    def test_square_has_at_least_4_nails(self):
         path_data = parse_svg_paths(load_svg("square.svg"))
-        nails = compute_nail_positions(path_data[0]["path"], 10, strategy=1)
+        nails = compute_nail_positions(path_data[0]["path"])
         assert len(nails) >= 4
 
     def test_square_nails_are_on_path(self):
         path_data = parse_svg_paths(load_svg("square.svg"))
         path = path_data[0]["path"]
-        nails = compute_nail_positions(path, 10, strategy=1)
+        nails = compute_nail_positions(path)
         for x, y, t in nails:
             pt = complex(x, y)
             min_dist = min(
@@ -78,20 +78,31 @@ class TestComputeNailPositions:
                 f"Nail ({x:.1f}, {y:.1f}) is {min_dist:.2f} from path"
             )
 
-    def test_strategies_differ_for_square(self):
+    def test_square_nails_follow_path(self):
         path_data = parse_svg_paths(load_svg("square.svg"))
-        nails1 = compute_nail_positions(path_data[0]["path"], 15, strategy=1)
-        nails2 = compute_nail_positions(path_data[0]["path"], 15, strategy=2)
-        assert len(nails2) >= len(nails1)
+        path = path_data[0]["path"]
+        nails = compute_nail_positions(path)
+        for x, y, t in nails:
+            pt = complex(x, y)
+            min_dist = min(
+                abs(pt - path.point(t_)) for t_ in [i / 1000 for i in range(1001)]
+            )
+            assert min_dist < 0.5, (
+                f"Nail ({x:.1f}, {y:.1f}) is {min_dist:.2f} from path"
+            )
 
     def test_spacing_is_respected(self):
+        # With the new behavior (no spacing fill), consecutive nails are
+        # at segment junctions. A 100mm square side has ~4 nails at its
+        # corners. The maximum gap is the full side length (~100mm), which
+        # is within expected bounds for junction-only mode.
         path_data = parse_svg_paths(load_svg("square.svg"))
-        nails = compute_nail_positions(path_data[0]["path"], 20, strategy=1)
+        nails = compute_nail_positions(path_data[0]["path"])
         for i in range(1, len(nails)):
             x1, y1, _ = nails[i - 1]
             x2, y2, _ = nails[i]
             dist = math.hypot(x2 - x1, y2 - y1)
-            assert dist <= 25, f"Distance {dist:.1f} > 25 between consecutive nails"
+            assert dist <= 120, f"Distance {dist:.1f} > 120 between consecutive nails"
 
 
 class TestSplitSubpaths:
@@ -144,7 +155,7 @@ class TestOffsetNailsInward:
     def test_offset_returns_original_positions(self):
         path_data = parse_svg_paths(load_svg("square.svg"))
         path = path_data[0]["path"]
-        nails = compute_nail_positions(path, 20, strategy=1)
+        nails = compute_nail_positions(path)
         assert len(nails) > 0
 
         raw_points = [(x, y) for x, y, t in nails]
@@ -157,7 +168,7 @@ class TestOffsetNailsInward:
     def test_outer_nails_are_raw_positions(self):
         path_data = parse_svg_paths(load_svg("square.svg"))
         path = path_data[0]["path"]
-        nails = compute_nail_positions(path, 50, strategy=1)
+        nails = compute_nail_positions(path)
         offset = offset_nails_inward(nails, path, hole_diameter=8)
 
         raw_flat = [(x, y) for x, y, t in nails]
@@ -166,7 +177,7 @@ class TestOffsetNailsInward:
     def test_inner_nails_are_raw_positions(self):
         path_data = parse_svg_paths(load_svg("letter_O_outline.svg"))
         path = path_data[0]["path"]
-        nails = compute_nail_positions(path, 15, strategy=1)
+        nails = compute_nail_positions(path)
 
         inner_nails = [(x, y, t) for x, y, t in nails if 25 < x < 75 and 25 < y < 75]
         assert len(inner_nails) >= 2, (
@@ -180,7 +191,7 @@ class TestOffsetNailsInward:
     def test_zero_hole_diameter_no_offset(self):
         path_data = parse_svg_paths(load_svg("square.svg"))
         path = path_data[0]["path"]
-        nails = compute_nail_positions(path, 20, strategy=1)
+        nails = compute_nail_positions(path)
         offset = offset_nails_inward(nails, path, hole_diameter=0)
         for i, (ox, oy) in enumerate(offset):
             assert (ox, oy) == (nails[i][0], nails[i][1]), (

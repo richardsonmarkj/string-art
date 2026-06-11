@@ -12,11 +12,9 @@ REPO_DIR = os.path.dirname(SCRIPT_DIR)
 LETTERS = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 FONT = "Arial"
-SPACING = 25
 SVG_HOLE_DIAMETER = 3
 STL_HOLE_DIAMETER = 5
 THICKNESS = 5
-CORNER_STRATEGY = 2
 OUTPUT_DIR = "output"
 
 
@@ -47,6 +45,8 @@ def run(cmd, desc):
         print(result.stderr)
         sys.exit(1)
     print("OK")
+    for line in result.stdout.strip().splitlines():
+        print(f"    {line}")
 
 
 def main():
@@ -65,24 +65,6 @@ def main():
         help="Path to TTF/OTF font file (overrides --font)",
     )
     parser.add_argument(
-        "--spacing",
-        type=float,
-        default=SPACING,
-        help=f"Gap between nail edges in mm for both mesh and plan (default: {SPACING})",
-    )
-    parser.add_argument(
-        "--mesh-spacing",
-        type=float,
-        default=20.0,
-        help="Gap between nail edges in mm for mesh model (default: 20)",
-    )
-    parser.add_argument(
-        "--plan-spacing",
-        type=float,
-        default=10.0,
-        help="Gap between nail edges in mm for plan SVG (default: 10)",
-    )
-    parser.add_argument(
         "--stl-hole-diameter",
         type=float,
         default=STL_HOLE_DIAMETER,
@@ -99,13 +81,6 @@ def main():
         type=float,
         default=THICKNESS,
         help=f"Model thickness in mm (default: {THICKNESS})",
-    )
-    parser.add_argument(
-        "--corner-strategy",
-        type=int,
-        choices=[1, 2],
-        default=CORNER_STRATEGY,
-        help=f"Corner strategy (default: {CORNER_STRATEGY})",
     )
     parser.add_argument(
         "--output-dir",
@@ -134,6 +109,23 @@ def main():
         help="Wall thickness for mesh mode in mm (default: 1.0)",
     )
     parser.add_argument("--skip-stl", action="store_true", help="Skip STL rendering")
+    parser.add_argument(
+        "--no-outline",
+        action="store_true",
+        help="Omit the original faint outline in plan SVG",
+    )
+    parser.add_argument(
+        "--no-edges",
+        action="store_true",
+        help="Only show nail circles, skip connecting bar lines in plan SVG",
+    )
+    parser.add_argument(
+        "--max-spacing",
+        type=float,
+        default=40,
+        help="Maximum arc-length gap between consecutive nails in mm "
+        "(default: 40). Pass 0 to disable.",
+    )
     args = parser.parse_args()
 
     if args.all:
@@ -171,40 +163,40 @@ def main():
         return cmd
 
     def _build_mesh_cmd(svg_path, scad_path):
-        return [
+        cmd = [
             sys.executable,
             os.path.join(REPO_DIR, "src", "svg_to_mesh_openscad.py"),
             "--input",
             svg_path,
-            "--spacing",
-            str(args.mesh_spacing),
             "--hole-diameter",
             str(args.stl_hole_diameter),
             "--wall-thickness",
             str(args.wall_thickness),
             "--thickness",
             str(args.thickness),
-            "--corner-strategy",
-            str(args.corner_strategy),
             "--output",
             scad_path,
         ]
+        cmd += ["--max-spacing", str(args.max_spacing)]
+        return cmd
 
     def _build_plan_cmd(svg_path, plan_path):
-        return [
+        cmd = [
             sys.executable,
             os.path.join(REPO_DIR, "src", "svg_to_nail_plan_svg.py"),
             "--input",
             svg_path,
-            "--spacing",
-            str(args.plan_spacing),
             "--hole-diameter",
             str(args.plan_hole_diameter),
-            "--corner-strategy",
-            str(args.corner_strategy),
             "--output",
             plan_path,
         ]
+        cmd += ["--max-spacing", str(args.max_spacing)]
+        if args.no_outline:
+            cmd += ["--no-outline"]
+        if args.no_edges:
+            cmd += ["--no-edges"]
+        return cmd
 
     for letter in letters:
         print(f"\n[{letter}]")

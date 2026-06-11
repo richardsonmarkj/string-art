@@ -2,12 +2,12 @@
 # generate_scad_stl.sh — Convert SVG outline to OpenSCAD mesh model and optionally render STL
 #
 # Usage:
-#   ./scripts/generate_scad_stl.sh --input letter_A.svg --spacing 10 --hole-diameter 5 --output mesh.scad
+#   ./scripts/generate_scad_stl.sh --input letter_A.svg --hole-diameter 5 --output mesh.scad
 #
 # Optional: pass --stl to also render an STL via the OpenSCAD CLI:
-#   ./scripts/generate_scad_stl.sh --input letter_A.svg --spacing 10 --hole-diameter 5 --wall-thickness 1 --stl
+#   ./scripts/generate_scad_stl.sh --input letter_A.svg --hole-diameter 5 --wall-thickness 1 --stl
 #
-# Arguments (--spacing, --hole-diameter, --wall-thickness, --thickness, --corner-strategy)
+# Arguments (--hole-diameter, --wall-thickness, --thickness, --max-spacing)
 # are forwarded to src/svg_to_mesh_openscad.py.
 # See `python3 src/svg_to_mesh_openscad.py --help` for full options.
 

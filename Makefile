@@ -17,7 +17,7 @@ lint:
 	python3 -m py_compile src/svg_to_mesh_openscad.py
 	python3 -m py_compile src/svg_to_nail_plan_svg.py
 
-# Generate a quick example: letter A in Arial
+# Generate a quick example: letter J in Arial
 OPENSCAD := $(shell command -v openscad 2>/dev/null || [ -x /Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD ] && echo "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD")
 
 mesh-example:
@@ -28,11 +28,9 @@ mesh-example:
 		--output examples/output/letter_J.svg
 	python3 src/svg_to_mesh_openscad.py \
 		--input examples/output/letter_J.svg \
-		--spacing 20 \
 		--hole-diameter 5 \
 		--wall-thickness 1 \
 		--thickness 5 \
-		--corner-strategy 2 \
 		--output examples/output/mesh_J.scad
 	@if [ -n "$(OPENSCAD)" ]; then \
 		echo "Rendering STL..."; \
@@ -54,9 +52,7 @@ plan-example:
 		--output examples/output/letter_A.svg
 	python3 src/svg_to_nail_plan_svg.py \
 		--input examples/output/letter_A.svg \
-		--spacing 20 \
 		--hole-diameter 3 \
-		--corner-strategy 1 \
 		--output examples/output/plan_A.svg
 	@echo ""
 	@echo "  SVG:  examples/output/letter_A.svg"
@@ -64,16 +60,24 @@ plan-example:
 
 # Batch generate all three — mesh SCAD, STL, and plan SVG (default: A-Z)
 ALL_LETTERS ?= A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
-ARIAL_LETTERS ?= A B C D E F G H J L M N O P S T U V W X Y Z
-CGOTHIC_LETTERS ?= K Q R
+ARIAL_LETTERS ?= A B C D E F G H J L M N S T W Z
+CGOTHIC_LETTERS ?= K Q
 LUCIDA_LETTERS ?= I
 CG_FONT_FILE ?=
 
 gs-batch:
 	@mkdir -p output
-	python3 scripts/batch_generate.py --all --letters $(LUCIDA_LETTERS) --font "Lucida Console" --corner-strategy 2
-	python3 scripts/batch_generate.py --all --letters $(ARIAL_LETTERS) --font "Arial" --corner-strategy 2
-	python3 scripts/batch_generate.py --all --letters $(CGOTHIC_LETTERS) --font-file "./internal/CenturyGothic.ttf" --corner-strategy 2
+	python3 scripts/batch_generate.py --plan --letters $(ARIAL_LETTERS) --font "Arial" --no-outline
+	python3 scripts/batch_generate.py --plan --letters $(CGOTHIC_LETTERS) --font-file "./internal/CenturyGothic.ttf" --no-outline
+	python3 scripts/batch_generate.py --plan --letters $(LUCIDA_LETTERS) --font "Lucida Console" --no-outline
+
+input-files:
+	# Process input/ SVGs through the plan tool with --no-outline
+	@for svg in input/*.svg; do \
+		name=$$(basename "$$svg" .svg); \
+		python3 src/svg_to_nail_plan_svg.py --input "$$svg" --output "output/plan_$$name.svg" --no-edges; \
+	done
+
 
 all-batch:
 	@mkdir -p output

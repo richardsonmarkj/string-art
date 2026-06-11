@@ -7,7 +7,7 @@ Generate 3D-printable or paper-printed string art nail templates. The toolchain 
 - **Font to SVG** — Extract any letter from any installed system font (TTF/OTF) or custom font file
 - **Mesh model** — Lightweight mesh of hollow cylinders at nail positions, connected by bars to nearest neighbors
 - **2D plan view** — Generate top-down blueprints showing nail+bar layout
-- **Two corner strategies** — Corners-first ensures sharp corners always get a nail; all-vertices distributes evenly across all path vertices
+- **Auto-strategy per subpath** — Subpaths with real curves keep all segment junctions; subpaths with only straight or near-straight segments use corner-only detection
 - **Subpath-aware** — Outer contours and inner holes (counters) each get independent nail distributions
 - **Batch processing** — Generate models for all 26 letters (A–Z) in a single command
 - **OpenSCAD import** — SVG is imported natively by OpenSCAD, preserving full bezier precision; nail positions align perfectly with the letter geometry
@@ -50,7 +50,7 @@ make mesh-example
 ```
 
 Generates a letter J mesh model (SCAD + optional STL).
-Use `make plan-example` for a 2D nail plan blueprint. (SVG + SCAD + optional STL) in `examples/output/`.
+Use `make plan-example` for a 2D nail plan blueprint.
 
 ### Step by step
 
@@ -73,11 +73,10 @@ python3 src/font_to_svg.py --letter B --font-file /path/to/font.ttf --output let
 ```bash
 python3 src/svg_to_mesh_openscad.py \
     --input letter_A.svg \
-    --spacing 10 \
     --hole-diameter 5 \
     --wall-thickness 1 \
     --thickness 5 \
-    --corner-strategy 1 \
+    --max-spacing 40 \
     --output mesh_A.scad
 ```
 
@@ -85,9 +84,8 @@ python3 src/svg_to_mesh_openscad.py \
 ```bash
 python3 src/svg_to_nail_plan_svg.py \
     --input letter_A.svg \
-    --spacing 10 \
     --hole-diameter 3 \
-    --corner-strategy 1 \
+    --max-spacing 40 \
     --output plan_A.svg
 ```
 
@@ -103,31 +101,17 @@ The Makefile auto-detects OpenSCAD on macOS (`/Applications/OpenSCAD.app/Content
 
 ```bash
 ./scripts/generate_svg.sh --letter A --font Arial --output letter_A.svg
-./scripts/generate_scad_stl.sh --input letter_A.svg --spacing 10 --hole-diameter 5 --stl
-./scripts/generate_plan_svg.sh --input letter_A.svg --spacing 10 --hole-diameter 3 --output plan_A.svg
+./scripts/generate_scad_stl.sh --input letter_A.svg --hole-diameter 5 --thickness 5 --stl
+./scripts/generate_plan_svg.sh --input letter_A.svg --hole-diameter 3 --output plan_A.svg
 ```
 
-## Output Types
+## Nail Placement
 
-| Command | Output | Description |
-|---------|--------|-------------|
-| `font_to_svg` | `.svg` | Letter outline (filled or stroked) |
-| `svg_to_mesh_openscad` | `.scad` | Hollow cylinders connected by bars (wireframe mesh) |
-| `svg_to_nail_plan_svg` | `.svg` | 2D top-down blueprint of nail+bar layout |
+Each closed subpath (contour) gets nails at its segment junctions. Subpaths with real curves (arc/chord ratio > 1.01, e.g. letter B's lobes) keep all segment junctions; subpaths with only straight or near-straight segments use corner-only detection (angle > 30°).
 
-All SCAD files import the original SVG via OpenSCAD's `import()` for perfect bezier alignment.
+Use `--max-spacing` to control nail density. When set (default 40mm), must-have corner/junction nails are always included, and any gap between consecutive nails exceeding the threshold is subdivided with evenly-spaced intermediate nails. Pass 0 to disable gap-filling and use junction-only placement.
 
-## Corner Strategies
-
-- **Strategy 1 (corners-first)** — Nails at sharp corners first, then distributed evenly. Guarantees every corner gets a nail.
-- **Strategy 2 (all-vertices)** — Distributed evenly using all path vertices as candidates, ignoring corner angle calculations (default).
-
-## Spacing
-
-`--spacing` controls the **edge-to-edge gap** between adjacent nail cylinders, not the center-to-center distance.
-The effective center-to-center spacing is `spacing + hole_diameter` on straight segments, and
-`spacing × 0.5 + hole_diameter` on curves (tighter on curves for smoother outlines). Use `--spacing 0`
-for cylinders that touch edge-to-edge.
+For small subpaths (whiskers, small ovals), a minimum of 3 nails is enforced to ensure the shape is represented.
 
 ## Batch Processing
 
@@ -138,10 +122,10 @@ Generate models for any set of letters in one command:
 python3 scripts/batch_generate.py
 
 # 2D plan SVGs for specific letters
-python3 scripts/batch_generate.py --plan --letters A B C --spacing 8 --hole-diameter 4
+python3 scripts/batch_generate.py --plan --letters A B C --plan-hole-diameter 4
 
 # Mesh models with custom parameters
-python3 scripts/batch_generate.py --mesh --letters A B C --spacing 10 --hole-diameter 5 --wall-thickness 1
+python3 scripts/batch_generate.py --mesh --letters A B C --stl-hole-diameter 5 --wall-thickness 1
 
 # Skip STL rendering
 python3 scripts/batch_generate.py --skip-stl
@@ -196,7 +180,7 @@ make lint       # Python syntax checks
 
 ## How It Works
 
-Nail positions are computed in the SVG's native coordinate space using `svgpathtools`. Each closed subpath (contour) gets nails distributed by its own perimeter length and the spacing parameter. The SCAD file imports the SVG directly — OpenSCAD's `import()` handles the SVG coordinate system natively, so no Y-flip or coordinate transformation is needed. The mesh model places hollow cylinders at each nail position connected by bars to their nearest neighbors.
+Nail positions are computed in the SVG's native coordinate space using `svgpathtools`. Each closed subpath (contour) gets nails at its segment junctions — corner-only for straight subpaths, all junctions for curved subpaths. The `--max-spacing` option subdivides gaps larger than the threshold with evenly-spaced intermediate nails. The SCAD file imports the SVG directly — OpenSCAD's `import()` handles the SVG coordinate system natively, so no Y-flip or coordinate transformation is needed. The mesh model places hollow cylinders at each nail position connected by bars to their nearest neighbors.
 
 ## License
 

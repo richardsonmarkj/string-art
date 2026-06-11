@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Generate a 2D SVG blueprint of nail+bar layout (top-down plan view).
 
-Reuses nail-position computation from svg_to_openscad.py. Each contour
-(outer path, inner counters) is drawn independently as a closed loop of
+Each contour (outer path, inner counters) is drawn independently as a closed loop of
 circles connected by thick lines — no cross-contour bridges.  The visual
 matches what the mesh model looks like from above.
 """
@@ -15,6 +14,7 @@ import xml.etree.ElementTree as ET
 import svgwrite
 
 from string_art_utils import (
+    _signed_area,
     _split_subpaths,
     compute_nail_positions,
     offset_nails_inward,
@@ -42,12 +42,6 @@ def main():
     )
     parser.add_argument("--input", required=True, help="Input SVG outline file")
     parser.add_argument(
-        "--spacing",
-        type=float,
-        default=10.0,
-        help="Gap between cylinder edges in mm (default: 10)",
-    )
-    parser.add_argument(
         "--hole-diameter",
         default=3.0,
         type=float,
@@ -57,17 +51,19 @@ def main():
         "--output", help="Output SVG plan file (default: input filename with .svg)"
     )
     parser.add_argument(
-        "--corner-strategy",
-        type=int,
-        choices=[1, 2],
-        default=2,
-        help="Corner strategy: 1=corners-first, 2=all-vertices (default: 2)",
-    )
-    parser.add_argument(
         "--no-outline", action="store_true", help="Omit the original faint outline"
     )
     parser.add_argument(
         "--no-edges", action="store_true", help="Only circles, skip connecting lines"
+    )
+    parser.add_argument(
+        "--max-spacing",
+        type=float,
+        default=40,
+        help="Arc-length spacing between consecutive nails in mm "
+        "(default: 40). Nails at path corners/junctions are always included; "
+        "additional nails fill gaps proportionally to achieve this spacing. "
+        "Pass 0 to disable and use junction-only placement.",
     )
     args = parser.parse_args()
 
@@ -93,20 +89,22 @@ def main():
 
     # Collect nail positions per subpath (no cross-subpath merging)
     subpath_nails = []
+    subpath_info = []
     for pd in path_data:
         subpaths, _ = _split_subpaths(pd["path"])
         for sp in subpaths:
             nails_with_t = compute_nail_positions(
                 sp,
-                args.spacing,
-                args.corner_strategy,
                 hole_diameter=args.hole_diameter,
+                max_spacing=args.max_spacing,
             )
             if nails_with_t:
                 positions = offset_nails_inward(
                     nails_with_t, sp, args.hole_diameter, all_subpaths=subpaths
                 )
+                direction = "inner" if _signed_area(sp) < 0 else "outer"
                 subpath_nails.append(positions)
+                subpath_info.append((direction, len(sp), len(positions)))
 
     if not subpath_nails:
         print("Error: No nail positions computed", file=sys.stderr)
@@ -160,17 +158,13 @@ def main():
     dwg.save()
 
     total_nails = sum(len(p) for p in subpath_nails)
-    total_edges = sum(len(p) for p in subpath_nails)
 
     print(f"Plan SVG saved to {args.output}")
     print(f"  Canvas:            {w:.0f}x{h:.0f}mm")
     print(f"  Nail circles:      {total_nails}")
-    print(f"  Contour edges:     {total_edges}")
     print(f"  Visual diameter:   {args.hole_diameter} mm")
-    print(f"  Edge gap:          {args.spacing} mm")
-    print(
-        f"  Corner strategy:   {'corners-first' if args.corner_strategy == 1 else 'all-vertices'}"
-    )
+    for i, (direction, segs, count) in enumerate(subpath_info):
+        print(f"  Subpath {i} ({direction}, {segs} segs): {count} nails")
 
 
 if __name__ == "__main__":
